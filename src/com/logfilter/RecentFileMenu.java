@@ -32,7 +32,7 @@ import javax.swing.JMenuItem;
  * Saves entries in a file called "[user.dir]/[name passed to constructor].recent".
  * @author Hugues Johnson
  */
-public abstract class RecentFileMenu extends JMenu{
+public abstract class RecentFileMenu extends JMenu {
 	private String pathToSavedFile; //where to save the items in this menu
 	private int itemCount; //how many items in the menu
 	private String[] recentEntries; //the recent file entries
@@ -43,37 +43,37 @@ public abstract class RecentFileMenu extends JMenu{
 	 * @param name The name of this menu, not displayed but used to store the list of recently used file names.
 	 * @param count The number of recent files to store.
 	 */
-	public RecentFileMenu(String name,int count){
+	public RecentFileMenu(String name,int count) {
 		super();
 		this.setText("Recent");
 		this.setMnemonic('R');
 		this.itemCount=count;
-		//initialize default entries
+		// initialize default entries
 		this.recentEntries=new String[count];
-		for(int index=0;index<this.itemCount;index++){
+		for (int index=0;index<this.itemCount;index++) {
 			this.recentEntries[index]=defaultText;
 		}
-		//figure out the name of the recent file
+		// figure out the name of the recent file
 		this.pathToSavedFile=System.getProperty("user.dir");
-		if((this.pathToSavedFile==null)||(this.pathToSavedFile.length()<=0)){
+		if ((this.pathToSavedFile==null)||(this.pathToSavedFile.length()<=0)) {
 			this.pathToSavedFile=new String(name+".ini"); //probably unreachable
-		} else if(this.pathToSavedFile.endsWith(File.separator)){
+		} else if (this.pathToSavedFile.endsWith(File.separator)) {
 			this.pathToSavedFile=this.pathToSavedFile+name+".ini";
-		} else{
+		} else {
 			this.pathToSavedFile=this.pathToSavedFile+File.separator+name+".ini";
 		}
 		//load the recent entries if they exist
 		File recentFile=new File(this.pathToSavedFile);
-		if(recentFile.exists()){
-			try{
-				LineNumberReader reader=new LineNumberReader(new FileReader(this.pathToSavedFile));
-				while(reader.ready()){
+		if (recentFile.exists()) {
+			try {
+				LineNumberReader reader = new LineNumberReader(new FileReader(this.pathToSavedFile));
+				while (reader.ready()) {
 					this.addEntry(reader.readLine(),false);
 				}
-			} catch(Exception x){
+			} catch(Exception x) {
 				x.printStackTrace();
 			}		
-		} else{ //disable
+		} else { //disable
 			this.setEnabled(false);
 		}
 	}
@@ -93,30 +93,30 @@ public abstract class RecentFileMenu extends JMenu{
 	 */
 	private void addEntry(String filePath,boolean updateFile){
 		//check if this is disabled 
-		if(!this.isEnabled()){
+		if (!this.isEnabled()) {
 			this.setEnabled(true);
 		}
 		//clear the existing items
 		this.removeAll();
 		//move everything down one slot
 		int count=this.itemCount-1;
-		for(int index=count;index>0;index--){
+		for (int index=count;index>0;index--) {
 			//check for duplicate entry
-			if(!this.recentEntries[index-1].equalsIgnoreCase(filePath)){
-				this.recentEntries[index]=new String(this.recentEntries[index-1]);
+			if (!this.recentEntries[index-1].equalsIgnoreCase(filePath)) {
+				this.recentEntries[index] = new String(this.recentEntries[index-1]);
 			}
 		}
 		//add the new item, check if it's not alredy the first item
-		if(!this.recentEntries[0].equalsIgnoreCase(filePath)){
-			this.recentEntries[0]=new String(filePath);
+		if (!this.recentEntries[0].equalsIgnoreCase(filePath)) {
+			this.recentEntries[0] = new String(filePath);
 		}
 		//add items back to the menu
-		for(int index=0;index<this.itemCount;index++){
+		for (int index=0;index<this.itemCount;index++) {
         	JMenuItem menuItem=new JMenuItem();
 			menuItem.setText(this.recentEntries[index]);
-			if(this.recentEntries[index].equals(defaultText)){
+			if (this.recentEntries[index].equals(defaultText)) {
 				menuItem.setVisible(false);
-			} else{
+			} else {
 				menuItem.setVisible(true);
 				menuItem.setToolTipText(this.recentEntries[index]);
 				menuItem.setActionCommand(this.recentEntries[index]);
@@ -129,19 +129,19 @@ public abstract class RecentFileMenu extends JMenu{
         	this.add(menuItem);
         }
         //update the file
-		if(updateFile){
-			try{
+		if (updateFile) {
+			try {
 				FileWriter writer=new FileWriter(new File(this.pathToSavedFile));
 				int topIndex=this.itemCount-1;
-				for(int index=topIndex;index>=0;index--){
-					if(!this.recentEntries[index].equals(defaultText)){
+				for (int index=topIndex;index>=0;index--) {
+					if (!this.recentEntries[index].equals(defaultText)) {
 						writer.write(this.recentEntries[index]);
 						writer.write("\n");
 					}
 				}
 				writer.flush();
 				writer.close();
-			} catch(Exception x){
+			} catch(Exception x) {
 				x.printStackTrace();
 			}
 		}

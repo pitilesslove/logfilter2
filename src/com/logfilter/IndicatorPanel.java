@@ -21,8 +21,7 @@ import javax.swing.JPanel;
 import javax.swing.JViewport;
 import javax.swing.border.EmptyBorder;
 
-public class IndicatorPanel extends JPanel
-{
+public class IndicatorPanel extends JPanel {
     private static final long serialVersionUID      = 1L;
 
     final int                 INDICATRO_BOOK_X_POS  = 5;
@@ -43,8 +42,7 @@ public class IndicatorPanel extends JPanel
     public boolean            m_bDrawFull;
     
 
-    public IndicatorPanel(LogFilterMain logFilterMain)
-    {
+    public IndicatorPanel(LogFilterMain logFilterMain) {
         super();
         m_LogFilterMain = logFilterMain;
         m_chBookmark = new JCheckBox();
@@ -62,8 +60,7 @@ public class IndicatorPanel extends JPanel
         add(m_chBookmark);
         add(m_chError);
 
-        addMouseListener(new MouseListener()
-        {
+        addMouseListener(new MouseListener() {
             public void mouseReleased(MouseEvent e){}            
             public void mousePressed(MouseEvent e)
             {
@@ -79,8 +76,7 @@ public class IndicatorPanel extends JPanel
             public void mouseEntered(MouseEvent e){}            
             public void mouseClicked(MouseEvent e){}
         });
-        addMouseMotionListener(new MouseMotionListener()
-        {
+        addMouseMotionListener(new MouseMotionListener() {
             public void mouseMoved(MouseEvent e){}
             public void mouseDragged(MouseEvent e)
             {
@@ -92,10 +88,8 @@ public class IndicatorPanel extends JPanel
                 }
             }
         });
-        addMouseWheelListener(new MouseWheelListener()
-        {
-            public void mouseWheelMoved(MouseWheelEvent e)
-            {
+        addMouseWheelListener(new MouseWheelListener() {
+            public void mouseWheelMoved(MouseWheelEvent e) {
                 m_LogFilterMain.m_scrollVBar.dispatchEvent(e);
             }
         });
@@ -106,8 +100,7 @@ public class IndicatorPanel extends JPanel
         JOptionPane.showMessageDialog(this, strMsg);
     }
 
-    public void paintComponent(Graphics g)
-    {
+    public void paintComponent(Graphics g) {
         super.paintComponent(g);
         m_g = g;
         m_rcBookmark.setBounds(INDICATRO_BOOK_X_POS, INDICATRO_Y_POS, INDICATRO_WIDTH, getHeight() - INDICATRO_Y_POS - INDICATRO_Y_GAP);
@@ -123,14 +116,12 @@ public class IndicatorPanel extends JPanel
         m_bDrawFull = true;
     }
     
-    void drawIndicator(Graphics g)
-    {
+    void drawIndicator(Graphics g) {
         if(m_arLogInfo == null) return;
 
         int TOTAL_COUNT = m_arLogInfo.size();
 
-        if(TOTAL_COUNT > 0)
-        {
+        if(TOTAL_COUNT > 0) {
             int HEIGHT      = 1;
             int MIN_HEIGHT  = 1;
             float fRate = (float)m_rcBookmark.height / (float)TOTAL_COUNT;
@@ -138,8 +129,7 @@ public class IndicatorPanel extends JPanel
                 HEIGHT = m_rcBookmark.height / TOTAL_COUNT + 1;
 
             //북마크 indicator를 그린다.
-            for( Integer nIndex : m_hmBookmark.keySet())
-            {
+            for( Integer nIndex : m_hmBookmark.keySet()) {
                 if(m_LogFilterMain.m_nChangedFilter == LogFilterMain.STATUS_CHANGE || m_LogFilterMain.m_nChangedFilter == LogFilterMain.STATUS_PARSING)
                     break;
                 int nY1 = (int)(INDICATRO_Y_POS + m_hmBookmark.get(nIndex) * fRate);
@@ -154,8 +144,7 @@ public class IndicatorPanel extends JPanel
 
 
             //에러 indicator를 그린다.
-            for( Integer nIndex : m_hmError.keySet())
-            {
+            for( Integer nIndex : m_hmError.keySet()) {
                 if(m_LogFilterMain.m_nChangedFilter == LogFilterMain.STATUS_CHANGE || m_LogFilterMain.m_nChangedFilter == LogFilterMain.STATUS_PARSING)
                     break;
                 int nY1 = (int)(INDICATRO_Y_POS + m_hmError.get(nIndex) * fRate);
@@ -170,34 +159,29 @@ public class IndicatorPanel extends JPanel
         }
     }
 
-    void drawBookmark(Graphics g)
-    {
+    void drawBookmark(Graphics g) {
         g.setColor(Color.BLUE);
         g.drawRect(m_rcBookmark.x, m_rcBookmark.y, m_rcBookmark.width, m_rcBookmark.height);
     }
 
-    void drawError(Graphics g)
-    {
+    void drawError(Graphics g) {
         g.setColor(Color.RED);
         g.drawRect(m_rcError.x, m_rcError.y, m_rcError.width, m_rcError.height);
     }
     
     int PAGE_INDICATOR_WIDTH = 3;
     int PAGE_INDICATOR_GAP = 2;
-    void drawPageIndicator(Graphics g)
-    {
+    void drawPageIndicator(Graphics g) {
         if(m_arLogInfo == null) return;
 
         int TOTAL_COUNT = m_arLogInfo.size();
 
-        if(TOTAL_COUNT > 0)
-        {
+        if(TOTAL_COUNT > 0) {
             JViewport viewport = (JViewport)m_LogFilterMain.m_scrollVBar.getViewport();
             Rectangle viewRect = viewport.getViewRect();
             
             int nItemHeight = m_LogFilterMain.m_tbLogTable.getRowHeight();
-            if(nItemHeight > 0)
-            {
+            if(nItemHeight > 0) {
                 float fRate = (float)m_rcBookmark.height / (float)TOTAL_COUNT;
 
                 int nFirst = m_LogFilterMain.m_tbLogTable.rowAtPoint(new Point(0, viewRect.y));
@@ -219,19 +203,16 @@ public class IndicatorPanel extends JPanel
 
     ItemListener m_itemListener = new ItemListener() {
         public void itemStateChanged(ItemEvent itemEvent) {
-            if(itemEvent.getSource().equals(m_chBookmark))
-            {
+            if(itemEvent.getSource().equals(m_chBookmark)) {
                 m_LogFilterMain.notiEvent(new INotiEvent.EventParam(INotiEvent.EVENT_CLICK_BOOKMARK));
             }
-            else if(itemEvent.getSource().equals(m_chError))
-            {
+            else if(itemEvent.getSource().equals(m_chError)) {
                 m_LogFilterMain.notiEvent(new INotiEvent.EventParam(INotiEvent.EVENT_CLICK_ERROR));
             }
         }
     };
     
-    public void setData(ArrayList<LogInfo> arLogInfo, HashMap<Integer, Integer> hmBookmark, HashMap<Integer, Integer> hmError)
-    {
+    public void setData(ArrayList<LogInfo> arLogInfo, HashMap<Integer, Integer> hmBookmark, HashMap<Integer, Integer> hmError) {
         m_arLogInfo     = arLogInfo;
         m_hmBookmark    = hmBookmark;
         m_hmError       = hmError;

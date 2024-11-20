@@ -19,14 +19,12 @@ import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumn;
 import javax.swing.table.TableColumnModel;
 
-public class TagTable extends JTable
-{
+public class TagTable extends JTable {
     private static final long             serialVersionUID = 1L;
 
     LogFilterMain                         m_LogFilterMain;
 
-    public TagTable(TagFilterTableModel tablemodel, LogFilterMain filterMain)
-    {
+    public TagTable(TagFilterTableModel tablemodel, LogFilterMain filterMain) {
         super(tablemodel);
         m_LogFilterMain = filterMain;
         init();
@@ -55,10 +53,8 @@ public class TagTable extends JTable
         getTableHeader().addMouseListener(new ColumnHeaderListener());
     }
 
-    public void showColumn(int nColumn, boolean bShow)
-    {
-        if(bShow)
-        {
+    public void showColumn(int nColumn, boolean bShow) {
+        if(bShow) {
             getColumnModel().getColumn(nColumn).setResizable(true);
             getColumnModel().getColumn(nColumn).setMaxWidth(TagFilterTableModel.ColWidth[nColumn] * 1000);
             getColumnModel().getColumn(nColumn).setMinWidth(1);
@@ -69,8 +65,7 @@ public class TagTable extends JTable
             hideColumn(nColumn);
     }
 
-    public void hideColumn(int nColumn)
-    {
+    public void hideColumn(int nColumn) {
         getColumnModel().getColumn(nColumn).setWidth(0);
         getColumnModel().getColumn(nColumn).setMinWidth(0);
         getColumnModel().getColumn(nColumn).setMaxWidth(0);
@@ -78,23 +73,19 @@ public class TagTable extends JTable
         getColumnModel().getColumn(nColumn).setResizable(false);
     }
 
-    private void setColumnWidth()
-    {
-        for(int iIndex = 0; iIndex < getColumnCount(); iIndex++)
-        {
+    private void setColumnWidth() {
+        for (int iIndex = 0; iIndex < getColumnCount(); iIndex++) {
             showColumn(iIndex, true);
         }
     }
 
-    public boolean isCellEditable(int row, int column)
-    {
-        if(column == LogFilterTableModel.COMUMN_BOOKMARK)
+    public boolean isCellEditable(int row, int column) {
+        if (column == LogFilterTableModel.COMUMN_BOOKMARK)
             return true;
         return false;
     }
 
-    boolean isInnerRect(Rectangle parent, Rectangle child)
-    {
+    boolean isInnerRect(Rectangle parent, Rectangle child) {
         if(parent.y <= child.y && (parent.y + parent.height) >= (child.y + child.height))
             return true;
         else
@@ -143,8 +134,7 @@ public class TagTable extends JTable
         col.setPreferredWidth(width);
     }
 
-    public class TagCellRenderer extends DefaultTableCellRenderer
-    {
+    public class TagCellRenderer extends DefaultTableCellRenderer {
         private static final long serialVersionUID = 1L;
         boolean m_bChanged;
 
@@ -162,7 +152,7 @@ public class TagTable extends JTable
                                                               row,
                                                               column);
 
-            if(column == TagInfo.COMUMN_TAG)
+            if (column == TagInfo.COMUMN_TAG)
                 return c;
             else
                 return new JCheckBox();
@@ -172,8 +162,7 @@ public class TagTable extends JTable
     public class ColumnHeaderListener extends MouseAdapter {
         public void mouseClicked(MouseEvent evt) {
 
-            if ( SwingUtilities.isLeftMouseButton( evt ) && evt.getClickCount() == 2 )
-            {
+            if ( SwingUtilities.isLeftMouseButton( evt ) && evt.getClickCount() == 2 ) {
                 JTable table = ((JTableHeader)evt.getSource()).getTable();
                 TableColumnModel colModel = table.getColumnModel();
 

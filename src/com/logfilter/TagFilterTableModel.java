@@ -4,8 +4,7 @@ import java.util.ArrayList;
 
 import javax.swing.table.AbstractTableModel;
 
-public class TagFilterTableModel extends AbstractTableModel
-{
+public class TagFilterTableModel extends AbstractTableModel {
     private static final long serialVersionUID = 1L;
 
     public static String  ColName[] = { "Tag", "Show", "Remove" };
@@ -19,9 +18,8 @@ public class TagFilterTableModel extends AbstractTableModel
         return ColName.length;
     }
 
-    public int getRowCount()
-    {
-        if(m_arData != null)
+    public int getRowCount() {
+        if (m_arData != null)
             return m_arData.size();
         else
             return 0;

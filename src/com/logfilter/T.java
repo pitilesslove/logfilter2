@@ -19,8 +19,7 @@ import java.util.Date;
 ** dhwoo     2010. 3. 12.        1.0              Created
 */
 
-public class T
-{
+public class T {
 //	private final static String PREFIX = "LogFilter";
 	private final static String POSTFIX = "[iookill]";
 	private static Boolean misEnabled = true;
@@ -30,10 +29,8 @@ public class T
 		misEnabled = isEnable;
 	}
 
-    public static void e()
-    {
-        if ( misEnabled )
-        {
+    public static void e() {
+        if ( misEnabled ) {
             Exception e = new Exception();
             StackTraceElement callerElement = e.getStackTrace()[1];
             System.out.println( getCurrentTime() + 
@@ -44,10 +41,8 @@ public class T
         }
     }
 
-    public static void e( Object strMsg )
-    {
-        if ( misEnabled )
-        {
+    public static void e( Object strMsg ) {
+        if ( misEnabled ) {
             Exception e = new Exception();
             StackTraceElement callerElement = e.getStackTrace()[1];
             System.out.println( getCurrentTime() + 
@@ -59,10 +54,8 @@ public class T
         }
     }
 
-    public static void w()
-    {
-        if ( misEnabled )
-        {
+    public static void w() {
+        if ( misEnabled ) {
             Exception e = new Exception();
             StackTraceElement callerElement = e.getStackTrace()[1];
             System.out.println( getCurrentTime() + 
@@ -73,10 +66,8 @@ public class T
         }
     }
 
-	public static void w( Object strMsg )
-	{
-		if ( misEnabled )
-		{
+	public static void w( Object strMsg ) {
+		if ( misEnabled ) {
 			Exception e = new Exception();
 			StackTraceElement callerElement = e.getStackTrace()[1];
             System.out.println( getCurrentTime() + 
@@ -88,10 +79,8 @@ public class T
 		}
 	}
 
-	public static void i()
-	{
-		if ( misEnabled )
-		{
+	public static void i() {
+		if ( misEnabled ) {
 			Exception e = new Exception();
 			StackTraceElement callerElement = e.getStackTrace()[1];
             System.out.println( getCurrentTime() + 
@@ -102,10 +91,8 @@ public class T
 		}
 	}
 
-    public static void i( Object strMsg )
-    {
-        if ( misEnabled )
-        {
+    public static void i( Object strMsg ) {
+        if ( misEnabled ) {
             Exception e = new Exception();
             StackTraceElement callerElement = e.getStackTrace()[1];
             System.out.println( getCurrentTime() + 
@@ -117,10 +104,8 @@ public class T
         }
     }
 
-    public static void d()
-	{
-		if ( misEnabled )
-		{
+    public static void d() {
+		if ( misEnabled ) {
 			Exception e = new Exception();
 			StackTraceElement callerElement = e.getStackTrace()[1];
             System.out.println( getCurrentTime() + 
@@ -131,10 +116,8 @@ public class T
 		}
 	}
 
-    public static void d( Object strMsg )
-    {
-        if ( misEnabled )
-        {
+    public static void d( Object strMsg ) {
+        if ( misEnabled ) {
             Exception e = new Exception();
             StackTraceElement callerElement = e.getStackTrace()[1];
             System.out.println( getCurrentTime() + 
@@ -146,13 +129,11 @@ public class T
         }
     }
     
-    public static String getCurrentTime()
-    {
+    public static String getCurrentTime() {
         long time = System.currentTimeMillis(); 
 
         SimpleDateFormat dayTime = new SimpleDateFormat("yyyy-mm-dd hh:mm:ss.SSS");
 
         return dayTime.format(new Date(time));
-
     }
 }

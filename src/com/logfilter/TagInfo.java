@@ -1,7 +1,6 @@
 package com.logfilter;
 
-public class TagInfo
-{
+public class TagInfo {
     static final int COMUMN_TAG    = 0;
     static final int COMUMN_SHOW   = 1;
     static final int COMUMN_REMOVE = 2;
@@ -10,10 +9,8 @@ public class TagInfo
     boolean          m_bShow;
     boolean          m_bRemove;
 
-    public Object getData(int nColumn)
-    {
-        switch(nColumn)
-        {
+    public Object getData(int nColumn) {
+        switch(nColumn) {
             case COMUMN_TAG:
                 return m_strTag;
             case COMUMN_SHOW:

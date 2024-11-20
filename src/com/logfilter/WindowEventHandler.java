@@ -3,10 +3,8 @@ package com.logfilter;
 import java.awt.event.WindowEvent;
 import java.awt.event.WindowListener;
 
-public class WindowEventHandler implements WindowListener
-{
-    public void windowClosing(WindowEvent e)
-    {
+public class WindowEventHandler implements WindowListener {
+    public void windowClosing(WindowEvent e) {
         e.getWindow().setVisible(false);
         e.getWindow().dispose();
         System.exit(0);

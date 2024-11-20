@@ -1,7 +1,6 @@
 package com.logfilter;
 
-public class LogColor
-{
+public class LogColor {
                                         //aarrggbb
     public static int   COLOR_GUIDE     = 0x00000000;
     public static int   COLOR_BOOKMARK  = 0x00FFFFBB;

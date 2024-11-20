@@ -1,4 +1,4 @@
-/**
+package com.logfilter; /**
  * 
  */
 import java.lang.reflect.InvocationTargetException;
