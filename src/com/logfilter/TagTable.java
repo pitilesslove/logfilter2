@@ -1,23 +1,10 @@
 package com.logfilter;
 
-import com.logfilter.TagFilterTableModel;
-
-import java.awt.Component;
-import java.awt.Dimension;
-import java.awt.Rectangle;
+import javax.swing.*;
+import javax.swing.table.*;
+import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-
-import javax.swing.JCheckBox;
-import javax.swing.JTable;
-import javax.swing.JViewport;
-import javax.swing.SwingUtilities;
-import javax.swing.table.DefaultTableCellRenderer;
-import javax.swing.table.DefaultTableColumnModel;
-import javax.swing.table.JTableHeader;
-import javax.swing.table.TableCellRenderer;
-import javax.swing.table.TableColumn;
-import javax.swing.table.TableColumnModel;
 
 public class TagTable extends JTable {
     private static final long             serialVersionUID = 1L;
@@ -45,8 +32,7 @@ public class TagTable extends JTable {
         // grid lines over the entire viewport.
         setShowGrid(false);
 
-        for(int iIndex = 0; iIndex < getColumnCount(); iIndex++)
-        {
+        for(int iIndex = 0; iIndex < getColumnCount(); iIndex++) {
             getColumnModel().getColumn(iIndex).setCellRenderer(new TagCellRenderer());
         }
 
@@ -54,7 +40,7 @@ public class TagTable extends JTable {
     }
 
     public void showColumn(int nColumn, boolean bShow) {
-        if(bShow) {
+        if (bShow) {
             getColumnModel().getColumn(nColumn).setResizable(true);
             getColumnModel().getColumn(nColumn).setMaxWidth(TagFilterTableModel.ColWidth[nColumn] * 1000);
             getColumnModel().getColumn(nColumn).setMinWidth(1);

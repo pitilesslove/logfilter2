@@ -95,8 +95,7 @@ public class LogTable extends JTable implements FocusListener, ActionListener {
         // grid lines over the entire viewport.
         setShowGrid(false);
 
-        for(int iIndex = 0; iIndex < getColumnCount(); iIndex++)
-        {
+        for (int iIndex = 0; iIndex < getColumnCount(); iIndex++) {
             getColumnModel().getColumn(iIndex).setCellRenderer(new LogCellRenderer());
         }
 
@@ -106,12 +105,12 @@ public class LogTable extends JTable implements FocusListener, ActionListener {
             {
                 Point p = e.getPoint();
                 int row = rowAtPoint( p );
-                if ( SwingUtilities.isLeftMouseButton( e ) ) {
+                if (SwingUtilities.isLeftMouseButton( e ) ) {
                     if (e.getClickCount() == 2) {
                         LogInfo logInfo = ((LogFilterTableModel)getModel()).getRow(row);
                         logInfo.m_bMarked = !logInfo.m_bMarked;
                         m_LogFilterMain.bookmarkItem(row, Integer.parseInt(logInfo.m_strLine) - 1, logInfo.m_bMarked);
-                     }
+                    }
                     else if (m_bAltPressed) {
                         int colum = columnAtPoint(p);
                         if (colum == LogFilterTableModel.COMUMN_CLZ) {
@@ -126,7 +125,7 @@ public class LogTable extends JTable implements FocusListener, ActionListener {
                         }
                     }
                 }
-                else if ( SwingUtilities.isRightMouseButton( e )) {
+                else if (SwingUtilities.isRightMouseButton( e )) {
                     int colum = columnAtPoint(p);
                     T.d("m_bAltPressed = " + m_bAltPressed);
                     if (m_bAltPressed) {
@@ -151,16 +150,14 @@ public class LogTable extends JTable implements FocusListener, ActionListener {
         getTableHeader().addMouseListener(new ColumnHeaderListener());
     }
 
-    public boolean isCellEditable(int row, int column)
-    {
-        if(column == LogFilterTableModel.COMUMN_BOOKMARK)
+    public boolean isCellEditable(int row, int column) {
+        if (column == LogFilterTableModel.COMUMN_BOOKMARK)
             return true;
         return false;
     }
 
-    boolean isInnerRect(Rectangle parent, Rectangle child)
-    {
-        if(parent.y <= child.y && (parent.y + parent.height) >= (child.y + child.height))
+    boolean isInnerRect(Rectangle parent, Rectangle child) {
+        if (parent.y <= child.y && (parent.y + parent.height) >= (child.y + child.height))
             return true;
         else
             return false;
@@ -192,8 +189,7 @@ public class LogTable extends JTable implements FocusListener, ActionListener {
         return m_strClzRemove;
     }
 
-    void gotoNextBookmark()
-    {
+    void gotoNextBookmark() {
         int nSeletectRow = getSelectedRow();
         Rectangle parent = getVisibleRect();
 
@@ -212,7 +208,7 @@ public class LogTable extends JTable implements FocusListener, ActionListener {
 
         for (int nIndex = 0; nIndex < nSeletectRow; nIndex++) {
             logInfo = ((LogFilterTableModel)getModel()).getRow(nIndex);
-            if(logInfo.m_bMarked) {
+            if (logInfo.m_bMarked) {
                 changeSelection(nIndex, 0, false, false);
                 int nVisible = nIndex;
                 if(!isInnerRect(parent, getCellRect(nIndex, 0, true)))
@@ -235,10 +231,10 @@ public class LogTable extends JTable implements FocusListener, ActionListener {
         LogInfo logInfo;
         for (int nIndex = nSeletectRow - 1; nIndex >= 0; nIndex--) {
             logInfo = ((LogFilterTableModel)getModel()).getRow(nIndex);
-            if(logInfo.m_bMarked) {
+            if (logInfo.m_bMarked) {
                 changeSelection(nIndex, 0, false, false);
                 int nVisible = nIndex;
-                if(!isInnerRect(parent, getCellRect(nIndex, 0, true)))
+                if (!isInnerRect(parent, getCellRect(nIndex, 0, true)))
                     nVisible = nIndex - getVisibleRowCount() / 2;
                 showRow(nVisible);
                 return;
@@ -250,7 +246,7 @@ public class LogTable extends JTable implements FocusListener, ActionListener {
             if (logInfo.m_bMarked) {
                 changeSelection(nIndex, 0, false, false);
                 int nVisible = nIndex;
-                if(!isInnerRect(parent, getCellRect(nIndex, 0, true)))
+                if (!isInnerRect(parent, getCellRect(nIndex, 0, true)))
                     nVisible = nIndex + getVisibleRowCount() / 2;
                 showRow(nVisible);
                 return;
@@ -298,12 +294,11 @@ public class LogTable extends JTable implements FocusListener, ActionListener {
                 case KeyEvent.VK_DOWN:
                     if (! m_bAltPressed )
                         break;
-                    if(e.getID() == KeyEvent.KEY_PRESSED)
+                    if (e.getID() == KeyEvent.KEY_PRESSED)
                         gotoNextBookmark();
                     return true;
                 case KeyEvent.VK_F:
-                    if(e.getID() == KeyEvent.KEY_PRESSED && ( (e.getModifiers() & InputEvent.CTRL_MASK) == InputEvent.CTRL_MASK))
-                    {
+                    if (e.getID() == KeyEvent.KEY_PRESSED && ( (e.getModifiers() & InputEvent.CTRL_MASK) == InputEvent.CTRL_MASK)) {
                         m_LogFilterMain.setFindFocus();
                         return true;
                     }
@@ -339,7 +334,7 @@ public class LogTable extends JTable implements FocusListener, ActionListener {
         int nFirst = m_LogFilterMain.m_tbLogTable.rowAtPoint(new Point(0, viewRect.y));
         int nLast = m_LogFilterMain.m_tbLogTable.rowAtPoint(new Point(0, viewRect.height - 1));
 
-        if(nLast < 0)
+        if (nLast < 0)
             nLast = m_LogFilterMain.m_tbLogTable.getRowCount();
         // Get maximum width of column data
         for (int r=nFirst; r<nFirst + nLast; r++) {
@@ -368,8 +363,7 @@ public class LogTable extends JTable implements FocusListener, ActionListener {
 
     public void showColumn(int nColumn, boolean bShow) {
         m_arbShow[nColumn] = bShow;
-        if(bShow)
-        {
+        if(bShow) {
             getColumnModel().getColumn(nColumn).setResizable(true);
             getColumnModel().getColumn(nColumn).setMaxWidth(LogFilterTableModel.ColWidth[nColumn] * 1000);
             getColumnModel().getColumn(nColumn).setMinWidth(1);
@@ -381,8 +375,7 @@ public class LogTable extends JTable implements FocusListener, ActionListener {
     }
 
     public void setColumnWidth() {
-        for(int iIndex = 0; iIndex < getColumnCount(); iIndex++)
-        {
+        for (int iIndex = 0; iIndex < getColumnCount(); iIndex++) {
             showColumn(iIndex, true);
         }
         showColumn(LogFilterTableModel.COMUMN_BOOKMARK, false);
@@ -424,8 +417,7 @@ public class LogTable extends JTable implements FocusListener, ActionListener {
 
     public void setValueAt(Object aValue, int row, int column) {
         LogInfo logInfo = ((LogFilterTableModel)getModel()).getRow(row);
-        if(column == LogFilterTableModel.COMUMN_BOOKMARK)
-        {
+        if(column == LogFilterTableModel.COMUMN_BOOKMARK) {
             logInfo.m_strBookmark = (String)aValue;
             m_LogFilterMain.setBookmark(Integer.parseInt(logInfo.m_strLine) - 1, (String)aValue);
         }
@@ -440,8 +432,8 @@ public class LogTable extends JTable implements FocusListener, ActionListener {
                                                        boolean isSelected,
                                                        boolean hasFocus,
                                                        int row,
-                                                       int column)
-        {
+                                                       int column
+        ) {
             if(value != null)
                 value = remakeData(column, (String)value);
             Component c = super.getTableCellRendererComponent(table,
@@ -453,12 +445,11 @@ public class LogTable extends JTable implements FocusListener, ActionListener {
             LogInfo logInfo = ((LogFilterTableModel)getModel()).getRow(row);
             c.setFont(getFont().deriveFont(m_fFontSize));
             c.setForeground(logInfo.m_TextColor);
-            if(isSelected)
-            {
-                if(logInfo.m_bMarked)
+            if (isSelected) {
+                if (logInfo.m_bMarked)
                     c.setBackground(new Color(LogColor.COLOR_BOOKMARK2));
             }
-            else if(logInfo.m_bMarked)
+            else if (logInfo.m_bMarked)
                 c.setBackground(new Color(LogColor.COLOR_BOOKMARK));
             else
                 c.setBackground(Color.WHITE);
@@ -473,19 +464,19 @@ public class LogTable extends JTable implements FocusListener, ActionListener {
             m_bChanged = false;
 
             strText = strText.replace( " ", "\u00A0" );
-            if(LogColor.COLOR_HIGHLIGHT != null && LogColor.COLOR_HIGHLIGHT.length > 0)
+            if (LogColor.COLOR_HIGHLIGHT != null && LogColor.COLOR_HIGHLIGHT.length > 0)
                 strText = remakeFind(strText, getHighlight(), LogColor.COLOR_HIGHLIGHT, true);
             else
                 strText = remakeFind(strText, getHighlight(), "#00FF00", true);
             strText = remakeFind(strText, strFind, "#FF0000", false);
-            if(m_bChanged)
+            if (m_bChanged)
                 strText = "<html><nobr>" + strText + "</nobr></html>";
 
             return strText.replace("\t", "    ");
         }
 
         String remakeFind(String strText, String strFind, String[] arColor, boolean bUseSpan) {
-            if(strFind == null || strFind.length() <= 0) return strText;
+            if (strFind == null || strFind.length() <= 0) return strText;
 
             strFind = strFind.replace( " ", "\u00A0" );
             StringTokenizer stk = new StringTokenizer(strFind, "|");
@@ -493,20 +484,18 @@ public class LogTable extends JTable implements FocusListener, ActionListener {
             String strToken;
             int nIndex = 0;
 
-            while (stk.hasMoreElements())
-            {
-                if(nIndex >= arColor.length)
+            while (stk.hasMoreElements()) {
+                if (nIndex >= arColor.length)
                     nIndex = 0;
                 strToken = stk.nextToken();
 
-                if(strText.toLowerCase().contains(strToken.toLowerCase()))
-                {
-                    if(bUseSpan)
+                if(strText.toLowerCase().contains(strToken.toLowerCase())) {
+                    if (bUseSpan)
                         newText = "<span style=\"background-color:#" + arColor[nIndex] + "\"><b>";
                     else
                         newText = "<font color=#" + arColor[nIndex] + "><b>";
                     newText += strToken;
-                    if(bUseSpan)
+                    if (bUseSpan)
                         newText += "</b></span>";
                     else
                         newText += "</b></font>";
@@ -519,25 +508,23 @@ public class LogTable extends JTable implements FocusListener, ActionListener {
         }
 
         String remakeFind(String strText, String strFind, String strColor, boolean bUseSpan) {
-            if(strFind == null || strFind.length() <= 0) return strText;
+            if (strFind == null || strFind.length() <= 0) return strText;
 
             strFind = strFind.replace( " ", "\u00A0" );
             StringTokenizer stk = new StringTokenizer(strFind, "|");
             String newText;
             String strToken;
 
-            while (stk.hasMoreElements())
-            {
+            while (stk.hasMoreElements()) {
                 strToken = stk.nextToken();
 
-                if(strText.toLowerCase().contains(strToken.toLowerCase()))
-                {
-                    if(bUseSpan)
+                if (strText.toLowerCase().contains(strToken.toLowerCase())) {
+                    if (bUseSpan)
                         newText = "<span style=\"background-color:" + strColor + "\"><b>";
                     else
                         newText = "<font color=" + strColor + "><b>";
                     newText += strToken;
-                    if(bUseSpan)
+                    if (bUseSpan)
                         newText += "</b></span>";
                     else
                         newText += "</b></font>";
@@ -550,13 +537,12 @@ public class LogTable extends JTable implements FocusListener, ActionListener {
     }
 
     public void showRow(int row) {
-        if(row < 0 ) row = 0;
-        if(row > getRowCount() - 1) row = getRowCount() - 1;
+        if (row < 0 ) row = 0;
+        if (row > getRowCount() - 1) row = getRowCount() - 1;
 
         Rectangle rList = getVisibleRect();
         Rectangle rCell = getCellRect(row, 0, true);
-        if(rList != null && rCell != null)
-        {
+        if (rList != null && rCell != null) {
             Rectangle scrollToRect = new Rectangle((int)rList.getX(), (int)rCell.getY(), (int)(rList.getWidth()), (int)rCell.getHeight());
             scrollRectToVisible(scrollToRect);
         }
@@ -567,20 +553,19 @@ public class LogTable extends JTable implements FocusListener, ActionListener {
 
         changeSelection(row, 0, false, false);
         int nVisible = row;
-        if(nLastSelectedIndex <= row || nLastSelectedIndex == -1)
+        if (nLastSelectedIndex <= row || nLastSelectedIndex == -1)
             nVisible = row + getVisibleRowCount() / 2;
         else
             nVisible = row - getVisibleRowCount() / 2;
-        if(nVisible < 0) nVisible = 0;
-        else if(nVisible > getRowCount() - 1) nVisible = getRowCount() - 1;
+        if (nVisible < 0) nVisible = 0;
+        else if (nVisible > getRowCount() - 1) nVisible = getRowCount() - 1;
         showRow(nVisible);
     }
 
     public class ColumnHeaderListener extends MouseAdapter {
         public void mouseClicked(MouseEvent evt) {
 
-            if ( SwingUtilities.isLeftMouseButton( evt ) && evt.getClickCount() == 2 )
-            {
+            if ( SwingUtilities.isLeftMouseButton( evt ) && evt.getClickCount() == 2 ) {
                 JTable table = ((JTableHeader)evt.getSource()).getTable();
                 TableColumnModel colModel = table.getColumnModel();
 
@@ -597,8 +582,7 @@ public class LogTable extends JTable implements FocusListener, ActionListener {
     }
 
     @Override
-    public void focusGained( FocusEvent arg0 )
-    {
+    public void focusGained( FocusEvent arg0 ) {
     }
 
     @Override
@@ -608,8 +592,7 @@ public class LogTable extends JTable implements FocusListener, ActionListener {
     }
 
     @Override
-    public void actionPerformed( ActionEvent arg0 )
-    {
+    public void actionPerformed( ActionEvent arg0 ) {
         Clipboard system = Toolkit.getDefaultToolkit().getSystemClipboard();;
         StringBuffer sbf = new StringBuffer();
         int numrows = getSelectedRowCount();
@@ -627,7 +610,7 @@ public class LogTable extends JTable implements FocusListener, ActionListener {
                     StringBuffer strTemp = new StringBuffer((String)getValueAt( rowsselected[i], j ));
                     if (j == LogFilterTableModel.COMUMN_CLZ) {
                         String strTag = strTemp.toString();
-                        for(int k = 0; k < m_nClzLength - strTag.length(); k++)
+                        for (int k = 0; k < m_nClzLength - strTag.length(); k++)
                             strTemp.append(" ");
                     }
                     strTemp.append(" ");
@@ -642,8 +625,7 @@ public class LogTable extends JTable implements FocusListener, ActionListener {
     }
     
     public void setTagLength(int nLength) {
-        if(m_nClzLength < nLength)
-        {
+        if (m_nClzLength < nLength) {
             m_nClzLength = nLength;
             T.d("m_nTagLength = " + m_nClzLength);
         }

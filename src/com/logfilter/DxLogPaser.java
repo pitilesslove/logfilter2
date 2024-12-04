@@ -31,7 +31,7 @@ public class DxLogPaser implements ILogParser {
 
         if (pattern.matcher(strText).matches()) {
 
-            // °á°ú¸¦ ÀúÀåÇÒ º¯¼ö
+            // ê²°ê³¼ë¥¼ ì €ìž¥í•  ë³€ìˆ˜
             String[] parts = strText.split("\\[|\\]\\[|\\]\\|", -1);
 
             log.m_strDateTime = parts[1];

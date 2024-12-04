@@ -25,7 +25,7 @@ public class LogFilterTableModel extends AbstractTableModel {
 
     public static void setColumnWidth(int nColumn, int nWidth) {
         T.d("nWidth = " + nWidth);
-        if(nWidth >= DEFULT_WIDTH[nColumn])
+        if (nWidth >= DEFULT_WIDTH[nColumn])
             ColWidth[nColumn] = nWidth;
     }
 
