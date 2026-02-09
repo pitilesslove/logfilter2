@@ -1,0 +1,41 @@
+2024-01-15 10:30:45.123  INFO [main] o.s.b.SpringApplication - Starting K8sLogViewerApplication v2.0.0
+2024-01-15 10:30:45.456 DEBUG [main] o.s.c.a.AnnotationConfigApplicationContext - Refreshing org.springframework.context.annotation.AnnotationConfigApplicationContext@12345
+2024-01-15 10:30:46.012  INFO [main] o.s.b.w.e.t.TomcatWebServer - Tomcat initialized with port(s): 8080 (http)
+2024-01-15 10:30:46.234  INFO [main] o.a.c.c.StandardService - Starting service [Tomcat]
+2024-01-15 10:30:46.456  INFO [main] o.a.c.c.StandardEngine - Starting Servlet engine: [Apache Tomcat/9.0.65]
+2024-01-15 10:30:46.789 DEBUG [main] o.s.w.s.h.SimpleUrlHandlerMapping - Mapped URL path [/api/**] onto handler
+2024-01-15 10:30:47.012  INFO [main] o.s.b.w.e.t.TomcatWebServer - Tomcat started on port(s): 8080 (http) with context path ''
+2024-01-15 10:30:47.234  INFO [main] o.s.b.SpringApplication - Started K8sLogViewerApplication in 2.5 seconds (JVM running for 3.2)
+2024-01-15 10:30:48.123 DEBUG [http-nio-8080-exec-1] o.s.w.s.DispatcherServlet - GET "/api/health", parameters={}
+2024-01-15 10:30:48.234  INFO [http-nio-8080-exec-1] c.e.d.c.HealthController - Health check requested
+2024-01-15 10:30:48.345 DEBUG [http-nio-8080-exec-1] o.s.w.s.DispatcherServlet - Completed 200 OK
+2024-01-15 10:30:50.123  WARN [http-nio-8080-exec-2] c.e.d.s.UserService - User not found: userId=12345
+2024-01-15 10:30:51.234 DEBUG [http-nio-8080-exec-3] c.e.d.r.UserRepository - Executing query: SELECT * FROM users WHERE id = ?
+2024-01-15 10:30:52.345  INFO [http-nio-8080-exec-3] c.e.d.c.UserController - User retrieved successfully: userId=67890
+2024-01-15 10:30:53.456 ERROR [http-nio-8080-exec-4] c.e.d.s.OrderService - Failed to process order
+java.lang.NullPointerException: Order item cannot be null
+    at com.example.demo.service.OrderService.validateOrder(OrderService.java:42)
+    at com.example.demo.service.OrderService.processOrder(OrderService.java:28)
+    at com.example.demo.controller.OrderController.createOrder(OrderController.java:35)
+    at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+    at org.springframework.web.servlet.FrameworkServlet.service(FrameworkServlet.java:897)
+Caused by: java.lang.IllegalArgumentException: Invalid item quantity
+    at com.example.demo.model.OrderItem.validate(OrderItem.java:55)
+    ... 10 more
+2024-01-15 10:30:54.567  INFO [http-nio-8080-exec-5] c.e.d.c.ProductController - Product list requested: page=1, size=20
+2024-01-15 10:30:55.678 DEBUG [http-nio-8080-exec-5] c.e.d.r.ProductRepository - Found 150 products
+2024-01-15 10:30:56.789  WARN [scheduling-1] c.e.d.j.CacheCleanupJob - Cache cleanup took longer than expected: 5234ms
+2024-01-15 10:30:57.890 TRACE [http-nio-8080-exec-6] c.e.d.f.LoggingFilter - Request headers: {Content-Type=application/json}
+2024-01-15 10:30:58.901  INFO [http-nio-8080-exec-6] c.e.d.c.AuthController - User login successful: username=admin
+2024-01-15 10:30:59.012 DEBUG [http-nio-8080-exec-7] o.s.s.w.a.UsernamePasswordAuthenticationFilter - Authentication success
+2024-01-15 10:31:00.123 ERROR [http-nio-8080-exec-8] c.e.d.s.PaymentService - Payment gateway timeout
+java.net.SocketTimeoutException: Read timed out
+    at java.net.SocketInputStream.socketRead0(Native Method)
+    at java.net.SocketInputStream.socketRead(SocketInputStream.java:116)
+    at com.example.demo.client.PaymentGatewayClient.sendRequest(PaymentGatewayClient.java:89)
+    at com.example.demo.service.PaymentService.processPayment(PaymentService.java:45)
+2024-01-15 10:31:01.234  INFO [http-nio-8080-exec-9] c.e.d.c.NotificationController - Push notification sent: userId=12345
+2024-01-15 10:31:02.345 DEBUG [async-executor-1] c.e.d.s.EmailService - Email queued for delivery: to=user@example.com
+2024-01-15 10:31:03.456  WARN [http-nio-8080-exec-10] c.e.d.v.RequestValidator - Invalid request parameter: field=email, value=invalid
+2024-01-15 10:31:04.567  INFO [main] o.s.b.a.e.w.EndpointLinksResolver - Exposing 3 endpoint(s) beneath base path '/actuator'
+2024-01-15 10:31:05.678 FATAL [main] c.e.d.K8sLogViewerApplication - Application startup failed due to configuration error

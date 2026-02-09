@@ -1,0 +1,5 @@
+2024-01-15 10:30:45.123  INFO [main] o.s.b.SpringApplication - Starting application
+2024-01-15 10:30:45.456 DEBUG [main] o.s.c.a.AnnotationConfigApplicationContext - Refreshing context
+2024-01-15 10:30:46.789  WARN [http-nio-8080-exec-1] c.e.d.MyController - Slow response detected
+2024-01-15 10:30:47.012 ERROR [http-nio-8080-exec-2] c.e.d.MyService - Exception occurred
+2024-01-15 10:30:48.345  INFO [main] o.s.b.SpringApplication - Application started

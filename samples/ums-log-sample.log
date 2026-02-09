@@ -1,0 +1,5 @@
+[2026-02-06 08:42:32,921 06699][INFO ][.RefreshTokenService][]|auth. Refresh token saved successfully for userId: 1, partnerId: null
+[2026-02-06 08:42:32,922 06700][INFO ][a.u.a.s.LoginService][]|auth. Login response created successfully for user: va@altimedia.com
+[2026-02-06 08:42:32,934 06712][ERROR][henticationFilterNew][]|auth. Authentication failed
+[2026-02-06 08:42:32,937 06715][WARN ][henticationFilterNew][]|auth. Warning message
+[2026-02-06 08:42:32,938 06716][DEBUG][a.u.a.s.LoginService][]|auth. Debug info

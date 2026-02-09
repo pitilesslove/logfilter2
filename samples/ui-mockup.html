@@ -1,0 +1,2066 @@
+<!DOCTYPE html>
+<html lang="ko" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>K8s Log Viewer v2.0 - Tailwind</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        // 로그 레벨 색상
+                        'level-trace': '#808080',
+                        'level-debug': '#0066cc',
+                        'level-info': '#2e8b57',
+                        'level-warn': '#ff9a00',
+                        'level-error': '#ff0000',
+                        'level-fatal': '#cc0000',
+                        // 커스텀 색상
+                        'highlight-bg': '#FFFF99',
+                        'highlight-bg-dark': '#4a4a00',
+                        'bookmark-bg': '#E3F2FD',
+                        'bookmark-bg-dark': '#0d3a58',
+                        'error-bg': '#FFEBEE',
+                        'error-bg-dark': '#3a1515',
+                        'warn-bg': '#FFF8E1',
+                        'warn-bg-dark': '#3a3515',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* 로그 레벨 색상 */
+        .level-TRACE { color: #808080; }
+        .level-DEBUG { color: #0066cc; }
+        .level-INFO { color: #2e8b57; }
+        .level-WARN { color: #ff9a00; }
+        .level-ERROR { color: #ff0000; }
+        .level-FATAL { color: #cc0000; }
+
+        /* 로그 행 특수 배경 */
+        .log-row-highlight { background-color: #FFFF99 !important; }
+        .dark .log-row-highlight { background-color: #4a4a00 !important; }
+        .log-row-bookmark { background-color: #E3F2FD !important; }
+        .dark .log-row-bookmark { background-color: #0d3a58 !important; }
+        .log-row-error { background-color: #FFEBEE !important; }
+        .dark .log-row-error { background-color: #3a1515 !important; }
+        .log-row-warn { background-color: #FFF8E1 !important; }
+        .dark .log-row-warn { background-color: #3a3515 !important; }
+
+        /* 키워드 하이라이트 */
+        .keyword-match {
+            color: #FF6600;
+            font-weight: bold;
+        }
+
+        /* Word Filter 매칭 하이라이트 */
+        .word-filter-match {
+            color: #16a34a;
+            font-weight: bold;
+            background-color: rgba(22, 163, 74, 0.15);
+            padding: 0 2px;
+            border-radius: 2px;
+        }
+        .dark .word-filter-match {
+            background-color: rgba(22, 163, 74, 0.25);
+        }
+
+        /* 선택된 행 (포커스) - 최상위 우선순위 */
+        .log-row-selected {
+            background-color: #3B82F6 !important;
+            color: white !important;
+        }
+        .log-row-selected td {
+            color: white !important;
+        }
+        .dark .log-row-selected {
+            background-color: #1D4ED8 !important;
+        }
+
+        /* JSON 데이터 포맷팅 */
+        .json-preview {
+            max-width: 600px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+        .json-preview:hover {
+            text-decoration: underline;
+        }
+        .json-expanded {
+            white-space: pre-wrap;
+            word-break: break-all;
+            background-color: #f5f5f5;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 11px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .dark .json-expanded {
+            background-color: #1f2937;
+        }
+
+        /* 필터 입력 컬러링 */
+        #word-find:not(:placeholder-shown) {
+            color: #16a34a;
+            font-weight: 600;
+        }
+        #word-find.filter-disabled {
+            color: #9ca3af !important;
+            font-weight: normal !important;
+            text-decoration: line-through;
+        }
+        #word-remove:not(:placeholder-shown) {
+            color: #dc2626;
+            font-weight: 600;
+        }
+        #word-remove.filter-disabled {
+            color: #9ca3af !important;
+            font-weight: normal !important;
+            text-decoration: line-through;
+        }
+        #class-show:not(:placeholder-shown) {
+            color: #2563eb;
+            font-weight: 600;
+        }
+        #class-show.filter-disabled {
+            color: #9ca3af !important;
+            font-weight: normal !important;
+            text-decoration: line-through;
+        }
+        #class-remove:not(:placeholder-shown) {
+            color: #dc2626;
+            font-weight: 600;
+        }
+        #class-remove.filter-disabled {
+            color: #9ca3af !important;
+            font-weight: normal !important;
+            text-decoration: line-through;
+        }
+        #highlight-keyword:not(:placeholder-shown) {
+            color: #ea580c;
+            font-weight: 600;
+            background-color: #fef3c7;
+        }
+        #highlight-keyword.filter-disabled {
+            color: #9ca3af !important;
+            font-weight: normal !important;
+            background-color: transparent !important;
+            text-decoration: line-through;
+        }
+        .dark #highlight-keyword:not(:placeholder-shown) {
+            background-color: #422006;
+        }
+
+        /* 가상 스크롤 스페이서 */
+        .virtual-scroll-spacer {
+            width: 100%;
+            pointer-events: none;
+        }
+
+        /* 검색어 입력 팝업 */
+        .search-popup {
+            display: none;
+        }
+        .search-popup.visible {
+            display: block;
+            animation: popup-fade 0.15s ease-out;
+        }
+        @keyframes popup-fade {
+            from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+            to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        }
+
+        /* 드롭다운 화살표 */
+        .searchable-dropdown-trigger::after {
+            content: '▼';
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 10px;
+        }
+
+        /* 드롭다운 항목 숨김 */
+        .searchable-dropdown-item.hidden {
+            display: none;
+        }
+
+        /* 검색 매칭 하이라이트 */
+        .searchable-dropdown-item .match {
+            background-color: #FFFF00;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 h-screen flex flex-col transition-colors duration-300">
+
+    <!-- 메뉴바 -->
+    <div class="bg-gray-200 dark:bg-gray-800 border-b border-gray-300 dark:border-gray-700 px-2 py-1 flex justify-between items-center">
+        <div class="flex gap-4">
+            <span class="px-3 py-1 cursor-pointer rounded hover:bg-gray-300 dark:hover:bg-gray-700 text-sm">파일</span>
+            <span class="px-3 py-1 cursor-pointer rounded hover:bg-gray-300 dark:hover:bg-gray-700 text-sm">편집</span>
+            <span class="px-3 py-1 cursor-pointer rounded hover:bg-gray-300 dark:hover:bg-gray-700 text-sm">보기</span>
+            <span class="px-3 py-1 cursor-pointer rounded hover:bg-gray-300 dark:hover:bg-gray-700 text-sm">도움말</span>
+        </div>
+        <button onclick="toggleTheme()" id="theme-toggle"
+            class="px-3 py-1 border border-gray-400 dark:border-gray-600 rounded text-sm hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors">
+            🌙 다크
+        </button>
+    </div>
+
+    <!-- K8s 선택 패널 -->
+    <div class="bg-gray-50 dark:bg-gray-800 border-b border-gray-300 dark:border-gray-700 p-2">
+        <div class="flex items-center gap-3 flex-wrap mb-2">
+            <label class="text-sm font-medium">Context:</label>
+            <select id="context" class="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-700 min-w-[150px]">
+                <option value="">-- 로딩 중 --</option>
+            </select>
+
+            <label class="text-sm font-medium">Namespace:</label>
+            <select id="namespace" class="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-700 min-w-[150px]">
+                <option value="">-- Context 선택 --</option>
+            </select>
+
+            <button onclick="loadContexts()" class="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm hover:bg-gray-200 dark:hover:bg-gray-700 bg-white dark:bg-gray-700">
+                새로고침
+            </button>
+        </div>
+        <div class="flex items-center gap-3 flex-wrap">
+            <label class="text-sm font-medium">Pod:</label>
+            <div class="searchable-dropdown relative inline-block" id="pod-dropdown">
+                <button type="button" id="pod-trigger"
+                    class="searchable-dropdown-trigger min-w-[350px] px-2 py-1 pr-7 border border-gray-300 dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-700 text-left truncate relative focus:outline-none focus:ring-2 focus:ring-green-500">
+                    -- Pod 선택 --
+                </button>
+                <div id="pod-list" class="absolute top-full left-0 right-0 max-h-[300px] overflow-y-auto bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 border-t-0 rounded-b z-50 hidden shadow-lg">
+                </div>
+            </div>
+            <input type="hidden" id="pod" value="">
+
+            <label class="text-sm font-medium">Container:</label>
+            <select id="container" class="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-700">
+                <option value="">-</option>
+            </select>
+
+            <button onclick="connectPod()" class="px-4 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-sm font-medium transition-colors">
+                연결
+            </button>
+        </div>
+    </div>
+
+    <!-- 필터 패널 -->
+    <div class="bg-gray-50 dark:bg-gray-800 border-b border-gray-300 dark:border-gray-700 p-2">
+        <div class="flex items-start gap-3 flex-wrap">
+            <!-- Presets -->
+            <fieldset class="border border-gray-300 dark:border-gray-600 rounded p-2 bg-white dark:bg-gray-700">
+                <legend class="text-xs font-semibold text-gray-600 dark:text-gray-400 px-1">Presets</legend>
+                <div class="flex items-center gap-1">
+                    <select id="preset-select" class="w-28 px-1 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-xs bg-white dark:bg-gray-600">
+                        <option value="">-- 선택 --</option>
+                    </select>
+                    <button onclick="loadPreset()" title="프리셋 적용" class="px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-xs hover:bg-gray-100 dark:hover:bg-gray-600 bg-white dark:bg-gray-700">적용</button>
+                    <button onclick="savePreset()" title="현재 필터 저장" class="px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-xs hover:bg-gray-100 dark:hover:bg-gray-600 bg-white dark:bg-gray-700">저장</button>
+                    <button onclick="deletePreset()" title="프리셋 삭제" class="px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-xs hover:bg-gray-100 dark:hover:bg-gray-600 bg-white dark:bg-gray-700 text-red-500">삭제</button>
+                </div>
+            </fieldset>
+
+            <!-- Word Filter -->
+            <fieldset class="border border-gray-300 dark:border-gray-600 rounded p-2 bg-white dark:bg-gray-700">
+                <legend class="text-xs font-semibold text-gray-600 dark:text-gray-400 px-1">Word filter</legend>
+                <div class="flex flex-col gap-1">
+                    <div class="flex items-center gap-2">
+                        <label class="text-xs w-14">Find:</label>
+                        <input type="text" id="word-find" placeholder="검색어 (| 로 구분)" class="w-48 px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-xs bg-white dark:bg-gray-600">
+                        <input type="checkbox" id="word-find-enabled" checked class="w-4 h-4" title="Find 필터 활성화">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-xs w-14">Remove:</label>
+                        <input type="text" id="word-remove" placeholder="제외어 (| 로 구분)" class="w-48 px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-xs bg-white dark:bg-gray-600">
+                        <input type="checkbox" id="word-remove-enabled" checked class="w-4 h-4" title="Remove 필터 활성화">
+                    </div>
+                </div>
+            </fieldset>
+
+            <!-- Class Filter -->
+            <fieldset class="border border-gray-300 dark:border-gray-600 rounded p-2 bg-white dark:bg-gray-700">
+                <legend class="text-xs font-semibold text-gray-600 dark:text-gray-400 px-1">Class filter</legend>
+                <div class="flex flex-col gap-1">
+                    <div class="flex items-center gap-2">
+                        <label class="text-xs w-14">Show:</label>
+                        <input type="text" id="class-show" placeholder="표시할 클래스" class="w-32 px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-xs bg-white dark:bg-gray-600">
+                        <input type="checkbox" id="class-show-enabled" checked class="w-4 h-4" title="Show 필터 활성화">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-xs w-14">Remove:</label>
+                        <input type="text" id="class-remove" placeholder="제외할 클래스" class="w-32 px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-xs bg-white dark:bg-gray-600">
+                        <input type="checkbox" id="class-remove-enabled" checked class="w-4 h-4" title="Remove 필터 활성화">
+                    </div>
+                </div>
+            </fieldset>
+
+            <!-- Highlight -->
+            <fieldset class="border border-gray-300 dark:border-gray-600 rounded p-2 bg-white dark:bg-gray-700">
+                <legend class="text-xs font-semibold text-gray-600 dark:text-gray-400 px-1">Highlight</legend>
+                <div class="flex items-center gap-2">
+                    <label class="text-xs">Keyword:</label>
+                    <input type="text" id="highlight-keyword" placeholder="하이라이트 키워드" class="w-28 px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-xs bg-white dark:bg-gray-600">
+                    <input type="checkbox" id="highlight-enabled" checked class="w-4 h-4" title="하이라이트 활성화">
+                    <span id="highlight-count" class="text-xs text-gray-500 dark:text-gray-400 min-w-[40px]">0/0</span>
+                    <button id="highlight-prev" onclick="navigateHighlight(-1)" title="이전 (Shift+F3)" class="px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-xs hover:bg-gray-100 dark:hover:bg-gray-600 bg-white dark:bg-gray-700">▲</button>
+                    <button id="highlight-next" onclick="navigateHighlight(1)" title="다음 (F3)" class="px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-xs hover:bg-gray-100 dark:hover:bg-gray-600 bg-white dark:bg-gray-700">▼</button>
+                </div>
+            </fieldset>
+
+            <!-- Log Level Filter -->
+            <fieldset class="border border-gray-300 dark:border-gray-600 rounded p-2 bg-white dark:bg-gray-700">
+                <legend class="text-xs font-semibold text-gray-600 dark:text-gray-400 px-1">Log filter</legend>
+                <div class="flex items-center gap-3">
+                    <label class="flex items-center gap-1 text-xs">
+                        <input type="checkbox" id="level-verbose" checked class="w-3 h-3">
+                        <span class="level-TRACE">Verbose</span>
+                    </label>
+                    <label class="flex items-center gap-1 text-xs">
+                        <input type="checkbox" id="level-debug" checked class="w-3 h-3">
+                        <span class="level-DEBUG">Debug</span>
+                    </label>
+                    <label class="flex items-center gap-1 text-xs">
+                        <input type="checkbox" id="level-info" checked class="w-3 h-3">
+                        <span class="level-INFO">Info</span>
+                    </label>
+                    <label class="flex items-center gap-1 text-xs">
+                        <input type="checkbox" id="level-warn" checked class="w-3 h-3">
+                        <span class="level-WARN">Warn</span>
+                    </label>
+                    <label class="flex items-center gap-1 text-xs">
+                        <input type="checkbox" id="level-error" checked class="w-3 h-3">
+                        <span class="level-ERROR">Error</span>
+                    </label>
+                    <label class="flex items-center gap-1 text-xs">
+                        <input type="checkbox" id="level-fatal" checked class="w-3 h-3">
+                        <span class="level-FATAL">Fatal</span>
+                    </label>
+                </div>
+            </fieldset>
+
+            <!-- Font Settings -->
+            <fieldset class="border border-gray-300 dark:border-gray-600 rounded p-2 bg-white dark:bg-gray-700">
+                <legend class="text-xs font-semibold text-gray-600 dark:text-gray-400 px-1">Font</legend>
+                <div class="flex items-center gap-2">
+                    <label class="text-xs">Size:</label>
+                    <input type="number" id="font-size" value="12" min="8" max="24" class="w-12 px-1 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-xs bg-white dark:bg-gray-600">
+                    <button id="font-apply" class="px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-xs hover:bg-gray-100 dark:hover:bg-gray-600 bg-white dark:bg-gray-700">OK</button>
+                    <label class="text-xs ml-2">Goto:</label>
+                    <input type="text" id="goto-line" placeholder="" class="w-14 px-1 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-xs bg-white dark:bg-gray-600">
+                </div>
+            </fieldset>
+        </div>
+    </div>
+
+    <!-- 컨트롤 패널 -->
+    <div class="bg-gray-100 dark:bg-gray-800 border-b border-gray-300 dark:border-gray-700 p-2">
+        <div class="flex items-center gap-3">
+            <span class="text-sm font-semibold">로그: <strong id="log-count-value">0</strong>줄</span>
+            <button id="connect-btn" onclick="connectPod()" class="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-sm transition-colors">▶ 시작</button>
+            <button onclick="loadSampleLogs()" class="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm hover:bg-gray-200 dark:hover:bg-gray-700 bg-white dark:bg-gray-700">📥 샘플 로드</button>
+            <button onclick="downloadLogs()" class="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm hover:bg-gray-200 dark:hover:bg-gray-700 bg-white dark:bg-gray-700">💾 다운로드</button>
+            <button onclick="clearLogs()" class="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded text-sm transition-colors">🗑 클리어</button>
+        </div>
+    </div>
+
+    <!-- 메인 영역 -->
+    <div class="flex flex-1 overflow-hidden">
+        <!-- 인디케이터 패널 -->
+        <div class="w-16 bg-gray-800 dark:bg-gray-900 border-r border-gray-600 flex flex-col p-1">
+            <div class="flex justify-center gap-1 mb-1 text-xs">
+                <label class="flex items-center gap-0.5" title="북마크 표시">
+                    <input type="checkbox" checked class="w-3 h-3">
+                    <span class="text-yellow-400">★</span>
+                </label>
+                <label class="flex items-center gap-0.5" title="에러 표시">
+                    <input type="checkbox" checked class="w-3 h-3">
+                    <span class="text-red-400">E</span>
+                </label>
+            </div>
+            <div class="flex-1 flex gap-0.5">
+                <div class="indicator-left flex-1 bg-gray-700 dark:bg-gray-800 rounded relative"></div>
+                <div class="indicator-right flex-1 bg-gray-700 dark:bg-gray-800 rounded relative"></div>
+            </div>
+        </div>
+
+        <!-- 로그 테이블 -->
+        <div class="log-table-container flex-1 overflow-auto bg-white dark:bg-gray-900 relative">
+            <table class="log-table w-full border-collapse text-xs">
+                <thead class="sticky top-0 z-10">
+                    <tr class="bg-gray-200 dark:bg-gray-800">
+                        <th class="w-8 text-center py-2 px-1 border-b-2 border-gray-300 dark:border-gray-600 font-semibold text-yellow-500">★</th>
+                        <th class="w-44 text-left py-2 px-1 border-b-2 border-gray-300 dark:border-gray-600 font-semibold">DateTime</th>
+                        <th class="w-14 text-center py-2 px-1 border-b-2 border-gray-300 dark:border-gray-600 font-semibold">Level</th>
+                        <th class="w-36 text-left py-2 px-1 border-b-2 border-gray-300 dark:border-gray-600 font-semibold text-purple-600 dark:text-purple-400">Thread</th>
+                        <th class="w-48 text-left py-2 px-1 border-b-2 border-gray-300 dark:border-gray-600 font-semibold text-green-700 dark:text-green-400">Class</th>
+                        <th class="min-w-[400px] text-left py-2 px-1 border-b-2 border-gray-300 dark:border-gray-600 font-semibold">Message</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td colspan="6" class="text-center py-5 text-gray-500 dark:text-gray-400">Pod를 선택하고 연결하세요</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 상태바 -->
+    <div class="bg-gray-200 dark:bg-gray-800 border-t border-gray-300 dark:border-gray-600 px-3 py-1 flex justify-between text-xs text-gray-600 dark:text-gray-400">
+        <span id="status-text">준비됨</span>
+        <div class="flex gap-5">
+            <span id="auto-scroll-status" onclick="toggleAutoScroll()" class="cursor-pointer hover:text-gray-800 dark:hover:text-gray-200">자동스크롤: ON</span>
+            <span id="display-count">표시: 0줄</span>
+        </div>
+    </div>
+
+    <!-- 검색어 입력 팝업 -->
+    <div class="search-popup fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/85 text-white px-6 py-4 rounded-lg text-2xl font-bold tracking-wide z-[2000] min-w-[100px] text-center shadow-2xl" id="search-popup">
+        <span class="text-green-500" id="search-text"></span>
+        <div class="text-xs text-gray-400 mt-2 tracking-normal">ESC: 취소 / Enter: 선택</div>
+    </div>
+
+    <script>
+        // ===== 전역 상태 =====
+        let allLogs = [];
+        let filteredLogs = [];
+        let podList = [];
+        let eventSource = null;
+        let streamId = null;
+        let isStreaming = false;
+        let autoScroll = true;
+
+        // 테스트용 전역 노출
+        window.allLogs = allLogs;
+        window.filteredLogs = filteredLogs;
+
+        // 하이라이트 네비게이션 상태
+        let highlightedIndices = [];
+        let currentHighlightPos = -1;
+
+        // 선택된 행 상태 (index 기반으로 유지)
+        let selectedLogIndex = -1;
+
+        // 가상 스크롤 설정
+        const virtualScroll = {
+            rowHeight: 28,
+            bufferSize: 20,
+            visibleStart: 0,
+            visibleEnd: 0,
+            enabled: true,
+            threshold: 1000
+        };
+
+        // ===== DOM 풀 재사용 =====
+        const rowPool = {
+            rows: [],           // 실제 TR 요소들
+            poolSize: 100,      // 풀 크기 (뷰포트 + 버퍼)
+            initialized: false,
+            topPaddingRow: null,
+            bottomPaddingRow: null,
+
+            // 풀 초기화
+            init(tbody) {
+                if (this.initialized) return;
+
+                // 상단 패딩 행
+                this.topPaddingRow = document.createElement('tr');
+                this.topPaddingRow.innerHTML = '<td colspan="6"></td>';
+                this.topPaddingRow.style.height = '0px';
+                this.topPaddingRow.classList.add('pool-padding-top');
+
+                // 데이터 행들 생성
+                for (let i = 0; i < this.poolSize; i++) {
+                    const row = this.createEmptyRow();
+                    row.style.display = 'none';
+                    this.rows.push(row);
+                }
+
+                // 하단 패딩 행
+                this.bottomPaddingRow = document.createElement('tr');
+                this.bottomPaddingRow.innerHTML = '<td colspan="6"></td>';
+                this.bottomPaddingRow.style.height = '0px';
+                this.bottomPaddingRow.classList.add('pool-padding-bottom');
+
+                // tbody에 추가
+                tbody.innerHTML = '';
+                tbody.appendChild(this.topPaddingRow);
+                this.rows.forEach(row => tbody.appendChild(row));
+                tbody.appendChild(this.bottomPaddingRow);
+
+                this.initialized = true;
+            },
+
+            // 빈 TR 요소 생성
+            createEmptyRow() {
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-100 dark:hover:bg-gray-800 border-b border-gray-200 dark:border-gray-700';
+                row.style.height = virtualScroll.rowHeight + 'px';
+                row.innerHTML = `
+                    <td class="w-8 text-center text-yellow-500 cell-bookmark"></td>
+                    <td class="w-44 px-1 cell-datetime"></td>
+                    <td class="w-14 text-center font-bold cell-level"></td>
+                    <td class="w-36 px-1 text-purple-600 dark:text-purple-400 truncate cell-thread"></td>
+                    <td class="w-48 px-1 text-green-700 dark:text-green-400 truncate cell-class"></td>
+                    <td class="min-w-[400px] px-1 cell-message"></td>
+                `;
+                return row;
+            },
+
+            // 행 데이터 업데이트 (DOM 생성 없음)
+            updateRow(row, log, index, highlightKeyword) {
+                row.dataset.index = index;
+                row.style.display = '';
+
+                // 행 클래스 업데이트
+                row.className = 'border-b border-gray-200 dark:border-gray-700';
+
+                // 선택된 행 상태 유지 (최우선)
+                if (index === selectedLogIndex) {
+                    row.classList.add('log-row-selected');
+                } else if (log.isBookmarked) {
+                    row.classList.add('log-row-bookmark');
+                } else if (log.isHighlighted) {
+                    row.classList.add('log-row-highlight');
+                } else if (log.level === 'ERROR' || log.level === 'FATAL') {
+                    row.classList.add('log-row-error');
+                } else if (log.level === 'WARN') {
+                    row.classList.add('log-row-warn');
+                } else {
+                    row.classList.add('hover:bg-gray-100', 'dark:hover:bg-gray-800');
+                }
+
+                // 셀 업데이트 (textContent 사용 - innerHTML보다 빠름)
+                row.querySelector('.cell-bookmark').textContent = log.isBookmarked ? '★' : '';
+                row.querySelector('.cell-datetime').textContent = log.dateTime || '';
+
+                const levelCell = row.querySelector('.cell-level');
+                levelCell.textContent = log.level || '';
+                levelCell.className = 'w-14 text-center font-bold cell-level level-' + (log.level || 'INFO');
+
+                row.querySelector('.cell-thread').textContent = log.thread || '';
+                row.querySelector('.cell-class').textContent = log.class || '';
+
+                // 메시지는 하이라이트 때문에 innerHTML 사용 (필요시만)
+                const msgCell = row.querySelector('.cell-message');
+                if (highlightKeyword || this.hasWordFilter()) {
+                    msgCell.innerHTML = formatMessage(log.message || '', highlightKeyword);
+                } else {
+                    msgCell.textContent = log.message || '';
+                }
+            },
+
+            // Word Filter 활성화 여부
+            hasWordFilter() {
+                const wordFindInput = document.getElementById('word-find');
+                return wordFindInput && wordFindInput.value.trim() !== '';
+            },
+
+            // 행 숨기기
+            hideRow(row) {
+                row.style.display = 'none';
+                row.dataset.index = '';
+            },
+
+            // 패딩 업데이트
+            updatePadding(topHeight, bottomHeight) {
+                this.topPaddingRow.style.height = topHeight + 'px';
+                this.bottomPaddingRow.style.height = bottomHeight + 'px';
+            },
+
+            // 풀 리셋
+            reset() {
+                this.rows.forEach(row => this.hideRow(row));
+                this.updatePadding(0, 0);
+            }
+        };
+
+        // ===== Pod 검색 드롭다운 =====
+        const podSearch = {
+            searchText: '',
+            isOpen: false,
+            highlightedIndex: -1,
+            hideTimeout: null,
+
+            init() {
+                const trigger = document.getElementById('pod-trigger');
+                const list = document.getElementById('pod-list');
+
+                trigger.addEventListener('click', () => this.toggle());
+                trigger.addEventListener('keydown', (e) => this.handleKeydown(e));
+
+                document.addEventListener('click', (e) => {
+                    if (!e.target.closest('#pod-dropdown')) {
+                        this.close();
+                    }
+                });
+            },
+
+            toggle() {
+                if (this.isOpen) {
+                    this.close();
+                } else {
+                    this.open();
+                }
+            },
+
+            open() {
+                const list = document.getElementById('pod-list');
+                list.classList.remove('hidden');
+                this.isOpen = true;
+                this.searchText = '';
+                this.highlightedIndex = -1;
+                this.updateFilter();
+                document.getElementById('pod-trigger').focus();
+            },
+
+            close() {
+                const list = document.getElementById('pod-list');
+                list.classList.add('hidden');
+                this.isOpen = false;
+                this.searchText = '';
+                this.hideSearchPopup();
+            },
+
+            handleKeydown(e) {
+                if (!this.isOpen && (e.key.length === 1 || e.key === 'ArrowDown')) {
+                    this.open();
+                }
+                if (!this.isOpen) return;
+
+                const items = this.getVisibleItems();
+
+                switch (e.key) {
+                    case 'Escape':
+                        this.close();
+                        e.preventDefault();
+                        break;
+                    case 'ArrowDown':
+                        e.preventDefault();
+                        this.highlightedIndex = Math.min(this.highlightedIndex + 1, items.length - 1);
+                        this.updateHighlight();
+                        break;
+                    case 'ArrowUp':
+                        e.preventDefault();
+                        this.highlightedIndex = Math.max(this.highlightedIndex - 1, 0);
+                        this.updateHighlight();
+                        break;
+                    case 'Enter':
+                        e.preventDefault();
+                        if (this.highlightedIndex >= 0 && items[this.highlightedIndex]) {
+                            this.selectItem(items[this.highlightedIndex].dataset.value);
+                        } else if (items.length === 1) {
+                            this.selectItem(items[0].dataset.value);
+                        }
+                        break;
+                    case 'Backspace':
+                        e.preventDefault();
+                        this.searchText = this.searchText.slice(0, -1);
+                        this.updateFilter();
+                        this.showSearchPopup();
+                        break;
+                    default:
+                        if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                            e.preventDefault();
+                            this.searchText += e.key.toLowerCase();
+                            this.updateFilter();
+                            this.showSearchPopup();
+                            const newItems = this.getVisibleItems();
+                            if (newItems.length > 0) {
+                                this.highlightedIndex = 0;
+                                this.updateHighlight();
+                            }
+                        }
+                }
+            },
+
+            getVisibleItems() {
+                return Array.from(document.querySelectorAll('#pod-list .searchable-dropdown-item:not(.hidden)'));
+            },
+
+            updateFilter() {
+                const items = document.querySelectorAll('#pod-list .searchable-dropdown-item');
+                const search = this.searchText.toLowerCase();
+
+                items.forEach(item => {
+                    const text = item.dataset.text.toLowerCase();
+                    if (!search || text.includes(search)) {
+                        item.classList.remove('hidden');
+                        if (search) {
+                            const regex = new RegExp(`(${this.escapeRegex(search)})`, 'gi');
+                            item.innerHTML = item.dataset.text.replace(regex, '<span class="match">$1</span>');
+                        } else {
+                            item.innerHTML = item.dataset.text;
+                        }
+                    } else {
+                        item.classList.add('hidden');
+                    }
+                });
+
+                if (this.highlightedIndex >= 0) {
+                    const visibleItems = this.getVisibleItems();
+                    if (this.highlightedIndex >= visibleItems.length) {
+                        this.highlightedIndex = visibleItems.length - 1;
+                    }
+                }
+            },
+
+            updateHighlight() {
+                const items = document.querySelectorAll('#pod-list .searchable-dropdown-item');
+                items.forEach(item => item.classList.remove('bg-blue-500', 'text-white'));
+
+                const visibleItems = this.getVisibleItems();
+                if (this.highlightedIndex >= 0 && visibleItems[this.highlightedIndex]) {
+                    visibleItems[this.highlightedIndex].classList.add('bg-blue-500', 'text-white');
+                    visibleItems[this.highlightedIndex].scrollIntoView({ block: 'nearest' });
+                }
+            },
+
+            selectItem(value) {
+                const pod = podList.find(p => p.name === value);
+                if (pod) {
+                    const nodeInfo = pod.node ? ` @${pod.node}` : '';
+                    document.getElementById('pod').value = value;
+                    document.getElementById('pod-trigger').textContent = `${pod.name} (${pod.status}, ${pod.ready})${nodeInfo}`;
+                    saveSettings();
+                }
+                this.close();
+            },
+
+            showSearchPopup() {
+                const popup = document.getElementById('search-popup');
+                const searchText = document.getElementById('search-text');
+
+                if (this.searchText) {
+                    searchText.textContent = this.searchText;
+                    popup.classList.add('visible');
+                    clearTimeout(this.hideTimeout);
+                    this.hideTimeout = setTimeout(() => {
+                        if (!this.searchText) this.hideSearchPopup();
+                    }, 2000);
+                } else {
+                    this.hideSearchPopup();
+                }
+            },
+
+            hideSearchPopup() {
+                document.getElementById('search-popup').classList.remove('visible');
+                clearTimeout(this.hideTimeout);
+            },
+
+            escapeRegex(str) {
+                return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            },
+
+            setItems(pods) {
+                podList = pods;
+                const list = document.getElementById('pod-list');
+                list.innerHTML = pods.map(p => {
+                    const nodeInfo = p.node ? ` @${p.node}` : '';
+                    const text = `${p.name} (${p.status}, ${p.ready})${nodeInfo}`;
+                    return `<div class="searchable-dropdown-item px-2 py-1 cursor-pointer text-sm border-b border-gray-200 dark:border-gray-600 hover:bg-blue-100 dark:hover:bg-gray-600" data-value="${p.name}" data-text="${text}">${text}</div>`;
+                }).join('');
+
+                list.querySelectorAll('.searchable-dropdown-item').forEach(item => {
+                    item.addEventListener('click', () => this.selectItem(item.dataset.value));
+                    item.addEventListener('mouseenter', () => {
+                        const items = this.getVisibleItems();
+                        this.highlightedIndex = items.indexOf(item);
+                        this.updateHighlight();
+                    });
+                });
+            },
+
+            setValue(value) {
+                const pod = podList.find(p => p.name === value);
+                if (pod) {
+                    const nodeInfo = pod.node ? ` @${pod.node}` : '';
+                    document.getElementById('pod').value = value;
+                    document.getElementById('pod-trigger').textContent = `${pod.name} (${pod.status}, ${pod.ready})${nodeInfo}`;
+                } else {
+                    document.getElementById('pod').value = '';
+                    document.getElementById('pod-trigger').textContent = '-- Pod 선택 --';
+                }
+            }
+        };
+
+        // ===== 설정 저장/로드 =====
+        const STORAGE_KEY = 'k8s-log-viewer-settings';
+
+        // 기본 tail 라인 수
+        const DEFAULT_TAIL_COUNT = 2000;
+
+        function saveSettings() {
+            const settings = {
+                context: document.getElementById('context').value,
+                namespace: document.getElementById('namespace').value,
+                pod: document.getElementById('pod').value
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+        }
+
+        function loadSettings() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                return saved ? JSON.parse(saved) : {};
+            } catch {
+                return {};
+            }
+        }
+
+        function applySettings() {
+            // 설정은 loadContexts에서 적용됨
+        }
+
+        // ===== 필터 프리셋 =====
+        const PRESETS_KEY = 'k8s-log-viewer-presets';
+
+        function getFilterState() {
+            return {
+                wordFind: document.getElementById('word-find')?.value || '',
+                wordFindEnabled: document.getElementById('word-find-enabled')?.checked ?? true,
+                wordRemove: document.getElementById('word-remove')?.value || '',
+                wordRemoveEnabled: document.getElementById('word-remove-enabled')?.checked ?? true,
+                classShow: document.getElementById('class-show')?.value || '',
+                classShowEnabled: document.getElementById('class-show-enabled')?.checked ?? true,
+                classRemove: document.getElementById('class-remove')?.value || '',
+                classRemoveEnabled: document.getElementById('class-remove-enabled')?.checked ?? true,
+                highlightKeyword: document.getElementById('highlight-keyword')?.value || '',
+                highlightEnabled: document.getElementById('highlight-enabled')?.checked ?? true,
+                levels: {
+                    verbose: document.getElementById('level-verbose')?.checked ?? true,
+                    debug: document.getElementById('level-debug')?.checked ?? true,
+                    info: document.getElementById('level-info')?.checked ?? true,
+                    warn: document.getElementById('level-warn')?.checked ?? true,
+                    error: document.getElementById('level-error')?.checked ?? true,
+                    fatal: document.getElementById('level-fatal')?.checked ?? true
+                }
+            };
+        }
+
+        function setFilterState(state) {
+            if (!state) return;
+
+            if (state.wordFind !== undefined) document.getElementById('word-find').value = state.wordFind;
+            if (state.wordFindEnabled !== undefined) document.getElementById('word-find-enabled').checked = state.wordFindEnabled;
+            if (state.wordRemove !== undefined) document.getElementById('word-remove').value = state.wordRemove;
+            if (state.wordRemoveEnabled !== undefined) document.getElementById('word-remove-enabled').checked = state.wordRemoveEnabled;
+            if (state.classShow !== undefined) document.getElementById('class-show').value = state.classShow;
+            if (state.classShowEnabled !== undefined) document.getElementById('class-show-enabled').checked = state.classShowEnabled;
+            if (state.classRemove !== undefined) document.getElementById('class-remove').value = state.classRemove;
+            if (state.classRemoveEnabled !== undefined) document.getElementById('class-remove-enabled').checked = state.classRemoveEnabled;
+            if (state.highlightKeyword !== undefined) document.getElementById('highlight-keyword').value = state.highlightKeyword;
+            if (state.highlightEnabled !== undefined) document.getElementById('highlight-enabled').checked = state.highlightEnabled;
+
+            if (state.levels) {
+                if (state.levels.verbose !== undefined) document.getElementById('level-verbose').checked = state.levels.verbose;
+                if (state.levels.debug !== undefined) document.getElementById('level-debug').checked = state.levels.debug;
+                if (state.levels.info !== undefined) document.getElementById('level-info').checked = state.levels.info;
+                if (state.levels.warn !== undefined) document.getElementById('level-warn').checked = state.levels.warn;
+                if (state.levels.error !== undefined) document.getElementById('level-error').checked = state.levels.error;
+                if (state.levels.fatal !== undefined) document.getElementById('level-fatal').checked = state.levels.fatal;
+            }
+
+            applyFilter();
+        }
+
+        function loadPresets() {
+            try {
+                const saved = localStorage.getItem(PRESETS_KEY);
+                return saved ? JSON.parse(saved) : {};
+            } catch {
+                return {};
+            }
+        }
+
+        function savePresets(presets) {
+            localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
+        }
+
+        function updatePresetDropdown() {
+            const select = document.getElementById('preset-select');
+            const presets = loadPresets();
+            const presetNames = Object.keys(presets).sort();
+            select.innerHTML = '<option value="">-- 선택 --</option>' +
+                presetNames.map(name => `<option value="${name}">${name}</option>`).join('');
+        }
+
+        function savePreset() {
+            const name = prompt('프리셋 이름을 입력하세요:');
+            if (!name || !name.trim()) return;
+
+            const presets = loadPresets();
+            presets[name.trim()] = getFilterState();
+            savePresets(presets);
+            updatePresetDropdown();
+            document.getElementById('preset-select').value = name.trim();
+            setStatus(`프리셋 '${name.trim()}' 저장됨`);
+        }
+
+        function loadPreset() {
+            const select = document.getElementById('preset-select');
+            const name = select.value;
+
+            if (!name) {
+                setStatus('프리셋을 선택하세요');
+                return;
+            }
+
+            const presets = loadPresets();
+            if (presets[name]) {
+                setFilterState(presets[name]);
+                setStatus(`프리셋 '${name}' 적용됨`);
+            }
+        }
+
+        function deletePreset() {
+            const select = document.getElementById('preset-select');
+            const name = select.value;
+
+            if (!name) {
+                setStatus('삭제할 프리셋을 선택하세요');
+                return;
+            }
+
+            if (!confirm(`프리셋 '${name}'을(를) 삭제하시겠습니까?`)) return;
+
+            const presets = loadPresets();
+            delete presets[name];
+            savePresets(presets);
+            updatePresetDropdown();
+            setStatus(`프리셋 '${name}' 삭제됨`);
+        }
+
+        // ===== K8s API 함수 =====
+        async function loadContexts() {
+            setStatus('Context 로딩 중...');
+            try {
+                const res = await fetch('/api/k8s/contexts');
+                const data = await res.json();
+                const select = document.getElementById('context');
+                const saved = loadSettings();
+
+                select.innerHTML = data.contexts.map(c =>
+                    `<option value="${c}"${c === (saved.context || data.current) ? ' selected' : ''}>${c}</option>`
+                ).join('');
+                setStatus(`Context ${data.contexts.length}개 로드됨`);
+                if (data.contexts.length > 0) loadNamespaces();
+            } catch (e) {
+                setStatus('Context 로드 실패: ' + e.message);
+            }
+        }
+
+        async function loadNamespaces() {
+            const context = document.getElementById('context').value;
+            setStatus('Namespace 로딩 중...');
+            try {
+                const res = await fetch(`/api/k8s/namespaces?context=${encodeURIComponent(context)}`);
+                const data = await res.json();
+                const select = document.getElementById('namespace');
+                const saved = loadSettings();
+
+                let defaultNs = saved.namespace || data.namespaces.find(n => n.includes('ums')) || 'default';
+                if (!data.namespaces.includes(defaultNs)) {
+                    defaultNs = data.namespaces[0] || 'default';
+                }
+
+                select.innerHTML = data.namespaces.map(n =>
+                    `<option value="${n}"${n === defaultNs ? ' selected' : ''}>${n}</option>`
+                ).join('');
+                setStatus(`Namespace ${data.namespaces.length}개 로드됨`);
+                saveSettings();
+                if (data.namespaces.length > 0) loadPods();
+            } catch (e) {
+                setStatus('Namespace 로드 실패: ' + e.message);
+            }
+        }
+
+        async function loadPods() {
+            const context = document.getElementById('context').value;
+            const namespace = document.getElementById('namespace').value;
+            setStatus('Pod 로딩 중...');
+            try {
+                const res = await fetch(`/api/k8s/pods?context=${encodeURIComponent(context)}&namespace=${encodeURIComponent(namespace)}`);
+                const data = await res.json();
+                const saved = loadSettings();
+
+                podSearch.setItems(data.pods);
+
+                let defaultPod = saved.pod;
+                if (!defaultPod || !data.pods.find(p => p.name === defaultPod)) {
+                    defaultPod = data.pods[0]?.name || '';
+                }
+
+                podSearch.setValue(defaultPod);
+                setStatus(`Pod ${data.pods.length}개 로드됨 (키보드로 검색 가능)`);
+                saveSettings();
+            } catch (e) {
+                setStatus('Pod 로드 실패: ' + e.message);
+            }
+        }
+
+        async function connectPod() {
+            const context = document.getElementById('context').value;
+            const namespace = document.getElementById('namespace').value;
+            const pod = document.getElementById('pod').value;
+
+            if (!pod) {
+                setStatus('Pod를 선택하세요');
+                return;
+            }
+
+            if (isStreaming) {
+                stopStream();
+            }
+
+            saveSettings();
+            setStatus(`Pod 로그 가져오는 중: ${pod}`);
+
+            try {
+                const url = `/api/k8s/logs?pod=${encodeURIComponent(pod)}&namespace=${encodeURIComponent(namespace)}&context=${encodeURIComponent(context)}&tail=${DEFAULT_TAIL_COUNT}`;
+                const res = await fetch(url);
+                const data = await res.json();
+                if (data.error) {
+                    setStatus('오류: ' + data.error);
+                    return;
+                }
+                await refreshLogs(true);  // 맨 아래로 스크롤
+                setStatus(`Pod 로그 로드됨: ${pod} (${data.count}줄) - 실시간 스트리밍 시작...`);
+            } catch (e) {
+                setStatus('로그 가져오기 실패: ' + e.message);
+                return;
+            }
+
+            startStream(pod, namespace, context);
+        }
+
+        // ===== SSE 스트리밍 함수 =====
+        function startStream(pod, namespace, context) {
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            const url = `/api/k8s/logs/stream?pod=${encodeURIComponent(pod)}&namespace=${encodeURIComponent(namespace)}&context=${encodeURIComponent(context)}&tail=0`;
+            eventSource = new EventSource(url);
+            isStreaming = true;
+            updateStreamingUI(true);
+
+            eventSource.addEventListener('init', (e) => {
+                const data = JSON.parse(e.data);
+                streamId = data.streamId;
+                setStatus(`🔴 실시간 스트리밍 중: ${data.pod} (Stream #${streamId})`);
+            });
+
+            eventSource.addEventListener('log', (e) => {
+                const log = JSON.parse(e.data);
+                addLogEntry(log);
+            });
+
+            eventSource.addEventListener('end', (e) => {
+                const data = JSON.parse(e.data);
+                setStatus(`스트리밍 종료: ${data.lines}줄 수신됨`);
+                stopStream();
+            });
+
+            eventSource.addEventListener('error', (e) => {
+                if (eventSource.readyState === EventSource.CLOSED) {
+                    setStatus('스트리밍 연결 종료됨');
+                    stopStream();
+                }
+            });
+
+            eventSource.onerror = () => {
+                if (isStreaming) {
+                    setStatus('스트리밍 연결 끊김 - 재연결 중...');
+                }
+            };
+        }
+
+        function stopStream() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+            if (streamId) {
+                fetch(`/api/k8s/logs/stream/stop?streamId=${streamId}`).catch(() => {});
+                streamId = null;
+            }
+            isStreaming = false;
+            updateStreamingUI(false);
+        }
+
+        // ===== 필터 상태 캐시 =====
+        let cachedFilterState = null;
+
+        function getCachedFilterState() {
+            if (!cachedFilterState) {
+                cachedFilterState = {
+                    wordFind: document.getElementById('word-find-enabled')?.checked ?
+                        (document.getElementById('word-find')?.value || '').toLowerCase().split('|').map(k => k.trim()).filter(k => k) : [],
+                    wordRemove: document.getElementById('word-remove-enabled')?.checked ?
+                        (document.getElementById('word-remove')?.value || '').toLowerCase().split('|').map(k => k.trim()).filter(k => k) : [],
+                    classShow: document.getElementById('class-show-enabled')?.checked ?
+                        (document.getElementById('class-show')?.value || '').toLowerCase().split('|').map(c => c.trim()).filter(c => c) : [],
+                    classRemove: document.getElementById('class-remove-enabled')?.checked ?
+                        (document.getElementById('class-remove')?.value || '').toLowerCase().split('|').map(c => c.trim()).filter(c => c) : [],
+                    highlightKeyword: document.getElementById('highlight-enabled')?.checked ?
+                        (document.getElementById('highlight-keyword')?.value || '').toLowerCase().split('|').map(k => k.trim()).filter(k => k) : [],
+                    enabledLevels: getEnabledLevels()
+                };
+            }
+            return cachedFilterState;
+        }
+
+        function invalidateFilterCache() {
+            cachedFilterState = null;
+        }
+
+        function getEnabledLevels() {
+            const levels = [];
+            if (document.getElementById('level-verbose')?.checked) levels.push('TRACE');
+            if (document.getElementById('level-debug')?.checked) levels.push('DEBUG');
+            if (document.getElementById('level-info')?.checked) levels.push('INFO');
+            if (document.getElementById('level-warn')?.checked) levels.push('WARN');
+            if (document.getElementById('level-error')?.checked) levels.push('ERROR');
+            if (document.getElementById('level-fatal')?.checked) levels.push('FATAL');
+            return levels;
+        }
+
+        // 단일 로그가 필터를 통과하는지 확인
+        function passesFilter(log, state) {
+            // 레벨 필터: 체크된 레벨이 없으면 모두 표시, 있으면 해당 레벨만
+            if (state.enabledLevels.length > 0 && !state.enabledLevels.includes(log.level)) {
+                return false;
+            }
+
+            // Word Find 필터
+            if (state.wordFind.length > 0) {
+                const logText = ((log.message || '') + ' ' + (log.class || '')).toLowerCase();
+                if (!state.wordFind.some(k => logText.includes(k))) return false;
+            }
+
+            // Word Remove 필터
+            if (state.wordRemove.length > 0) {
+                const logText = (log.message || '').toLowerCase();
+                if (state.wordRemove.some(k => logText.includes(k))) return false;
+            }
+
+            // Class Show 필터
+            if (state.classShow.length > 0) {
+                const className = (log.class || '').toLowerCase();
+                if (!state.classShow.some(c => className.includes(c))) return false;
+            }
+
+            // Class Remove 필터
+            if (state.classRemove.length > 0) {
+                const className = (log.class || '').toLowerCase();
+                if (state.classRemove.some(c => className.includes(c))) return false;
+            }
+
+            return true;
+        }
+
+        // 하이라이트 여부 확인
+        function checkHighlight(log, state) {
+            if (state.highlightKeyword.length === 0) return false;
+            const logText = ((log.message || '') + ' ' + (log.class || '')).toLowerCase();
+            return state.highlightKeyword.some(k => logText.includes(k));
+        }
+
+        // 증분 로그 추가 (DOM 풀 재사용)
+        function appendFilteredLog(log, index) {
+            const container = document.querySelector('.log-table-container');
+            const highlightKeyword = document.getElementById('highlight-enabled')?.checked ?
+                document.getElementById('highlight-keyword')?.value || '' : '';
+
+            // 풀이 초기화되지 않았으면 아무것도 하지 않음 (applyFilter에서 처리됨)
+            if (!rowPool.initialized) return;
+
+            if (!virtualScroll.enabled) {
+                // 가상 스크롤 비활성화 - 풀 내에서 다음 빈 슬롯 사용
+                const displayCount = Math.min(index + 1, rowPool.poolSize);
+                if (index < rowPool.poolSize) {
+                    rowPool.updateRow(rowPool.rows[index], log, index, highlightKeyword);
+                }
+            } else if (autoScroll) {
+                // 가상 스크롤 + 자동 스크롤 - 맨 아래로 스크롤하며 풀 업데이트
+                const clientHeight = container.clientHeight;
+                const currentVisibleRows = Math.ceil(clientHeight / virtualScroll.rowHeight) || 30;
+                const maxVisible = currentVisibleRows + virtualScroll.bufferSize * 2;
+
+                // 새 로그가 보이는 영역에 포함되도록 visibleEnd 업데이트
+                const totalLogs = filteredLogs.length;
+                const newStart = Math.max(0, totalLogs - maxVisible);
+                const newEnd = totalLogs;
+
+                virtualScroll.visibleStart = newStart;
+                virtualScroll.visibleEnd = newEnd;
+
+                // 패딩 업데이트
+                const topPadding = newStart * virtualScroll.rowHeight;
+                rowPool.updatePadding(topPadding, 0);
+
+                // 풀의 각 행 업데이트
+                const visibleCount = newEnd - newStart;
+                for (let i = 0; i < rowPool.poolSize; i++) {
+                    if (i < visibleCount) {
+                        const logIndex = newStart + i;
+                        rowPool.updateRow(rowPool.rows[i], filteredLogs[logIndex], logIndex, highlightKeyword);
+                    } else {
+                        rowPool.hideRow(rowPool.rows[i]);
+                    }
+                }
+            }
+            // autoScroll OFF면 데이터만 추가되고 렌더링은 스크롤 이벤트에서 처리
+
+            // 인디케이터 업데이트 (간소화)
+            updateIndicatorForNewLog(log, index);
+        }
+
+        // 단일 행에 대한 이벤트 바인딩
+        function attachRowEventsForRow(row) {
+            if (!row || !row.hasAttribute('data-index')) return;
+
+            row.addEventListener('click', function(e) {
+                if (e.target.classList.contains('json-preview')) {
+                    toggleJsonExpand(e.target);
+                    return;
+                }
+                document.querySelectorAll('.log-table tr.log-row-selected').forEach(r => r.classList.remove('log-row-selected'));
+                this.classList.add('log-row-selected');
+            });
+
+            row.addEventListener('dblclick', function() {
+                const index = parseInt(this.dataset.index);
+                if (!isNaN(index) && filteredLogs[index]) {
+                    filteredLogs[index].isBookmarked = !filteredLogs[index].isBookmarked;
+                    applyFilter();
+                }
+            });
+        }
+
+        // 새 로그에 대한 인디케이터만 업데이트
+        function updateIndicatorForNewLog(log, index) {
+            const leftContainer = document.querySelector('.indicator-left');
+            const rightContainer = document.querySelector('.indicator-right');
+            if (!leftContainer || !rightContainer || filteredLogs.length === 0) return;
+
+            const containerHeight = leftContainer.clientHeight;
+            const top = Math.floor((index / filteredLogs.length) * containerHeight);
+
+            if (log.isBookmarked) {
+                leftContainer.innerHTML += `<div class="absolute w-full h-0.5 bg-yellow-400" style="top: ${top}px"></div>`;
+            }
+            if (log.level === 'ERROR' || log.level === 'FATAL') {
+                rightContainer.innerHTML += `<div class="absolute w-full h-0.5 bg-red-500" style="top: ${top}px"></div>`;
+            } else if (log.level === 'WARN') {
+                rightContainer.innerHTML += `<div class="absolute w-full h-0.5 bg-orange-400" style="top: ${top}px"></div>`;
+            }
+        }
+
+        function addLogEntry(log) {
+            const entry = {
+                line: allLogs.length + 1,
+                dateTime: log.dateTime,
+                level: log.level,
+                thread: log.thread,
+                class: log.class,
+                message: log.message,
+                hasStackTrace: log.hasStackTrace,
+                isBookmarked: false,
+                isHighlighted: false
+            };
+
+            allLogs.push(entry);
+
+            // 캐시된 필터 상태로 통과 여부 확인
+            const filterState = getCachedFilterState();
+            if (passesFilter(entry, filterState)) {
+                entry.isHighlighted = checkHighlight(entry, filterState);
+                const newIndex = filteredLogs.length;
+                filteredLogs.push(entry);
+
+                if (entry.isHighlighted) {
+                    highlightedIndices.push(newIndex);
+                    updateHighlightCount();
+                }
+
+                // DOM에 증분 추가
+                appendFilteredLog(entry, newIndex);
+            }
+
+            // 자동 스크롤
+            if (autoScroll) {
+                requestAnimationFrame(() => {
+                    const container = document.querySelector('.log-table-container');
+                    if (container) container.scrollTop = container.scrollHeight;
+                });
+            }
+
+            updateLogCount();
+        }
+
+        function updateStreamingUI(streaming) {
+            const connectBtn = document.getElementById('connect-btn');
+            if (connectBtn) {
+                if (streaming) {
+                    connectBtn.textContent = '⏹ 중지';
+                    connectBtn.onclick = stopStream;
+                    connectBtn.className = 'px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded text-sm transition-colors';
+                } else {
+                    connectBtn.textContent = '▶ 시작';
+                    connectBtn.onclick = connectPod;
+                    connectBtn.className = 'px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-sm transition-colors';
+                }
+            }
+        }
+
+        function toggleAutoScroll() {
+            autoScroll = !autoScroll;
+            updateAutoScrollStatus();
+            // 자동 스크롤 활성화 시 맨 아래로 이동
+            if (autoScroll) {
+                const container = document.querySelector('.log-table-container');
+                if (container) {
+                    container.scrollTop = container.scrollHeight;
+                }
+            }
+        }
+
+        function updateAutoScrollStatus() {
+            document.getElementById('auto-scroll-status').textContent = `자동스크롤: ${autoScroll ? 'ON' : 'OFF'}`;
+        }
+
+        // ===== 테마 관리 =====
+        function toggleTheme() {
+            const html = document.documentElement;
+            const isDark = html.classList.contains('dark');
+
+            if (isDark) {
+                html.classList.remove('dark');
+                localStorage.setItem('theme', 'light');
+            } else {
+                html.classList.add('dark');
+                localStorage.setItem('theme', 'dark');
+            }
+
+            const btn = document.getElementById('theme-toggle');
+            btn.textContent = html.classList.contains('dark') ? '☀️ 라이트' : '🌙 다크';
+        }
+
+        function loadTheme() {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            if (savedTheme === 'dark') {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+
+            const btn = document.getElementById('theme-toggle');
+            if (btn) {
+                btn.textContent = savedTheme === 'dark' ? '☀️ 라이트' : '🌙 다크';
+            }
+        }
+
+        // ===== 로그 관리 함수 =====
+        async function loadSampleLogs() {
+            setStatus('샘플 로딩 중...');
+            const res = await fetch('/api/load');
+            const data = await res.json();
+            setStatus(`샘플 로그 로드됨: ${data.count}줄`);
+            refreshLogs(true);  // 맨 아래로 스크롤
+        }
+
+        async function clearLogs() {
+            await fetch('/api/clear');
+            allLogs = [];
+            filteredLogs = [];
+            selectedLogIndex = -1;  // 선택 상태 초기화
+
+            // DOM 풀 리셋
+            if (rowPool.initialized) {
+                rowPool.reset();
+            }
+
+            renderLogs([]);
+            updateIndicator([]);
+            setStatus('로그 클리어됨');
+        }
+
+        async function refreshLogs(scrollToBottom = false) {
+            const res = await fetch('/api/logs');
+            allLogs = await res.json();
+            applyFilter();
+
+            // 맨 아래로 스크롤 (렌더링 완료 후)
+            if (scrollToBottom) {
+                requestAnimationFrame(() => {
+                    setTimeout(() => {
+                        const container = document.querySelector('.log-table-container');
+                        if (container) {
+                            container.scrollTop = container.scrollHeight;
+                        }
+                    }, 50);
+                });
+            }
+        }
+
+        // ===== 로그 다운로드 =====
+        function downloadLogs() {
+            const logsToDownload = filteredLogs.length > 0 ? filteredLogs : allLogs;
+
+            if (logsToDownload.length === 0) {
+                setStatus('다운로드할 로그가 없습니다');
+                return;
+            }
+
+            const logText = logsToDownload.map(log => {
+                const parts = [
+                    log.dateTime || '',
+                    log.level || '',
+                    log.thread ? `[${log.thread}]` : '',
+                    log.class || '',
+                    log.message || ''
+                ].filter(p => p).join(' ');
+                return parts;
+            }).join('\n');
+
+            const now = new Date();
+            const timestamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            const pod = document.getElementById('pod')?.value || 'logs';
+            const filename = `${pod}-${timestamp}.log`;
+
+            const blob = new Blob([logText], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            setStatus(`${logsToDownload.length}줄 다운로드됨: ${filename}`);
+        }
+
+        // ===== 필터 함수 =====
+        function applyFilter() {
+            // 필터 캐시 무효화 및 새로 생성
+            invalidateFilterCache();
+            const filterState = getCachedFilterState();
+
+            // 필터링 수행 (캐시된 상태 사용)
+            filteredLogs = allLogs.filter(log => passesFilter(log, filterState));
+
+            // 하이라이트 처리
+            highlightedIndices = [];
+            filteredLogs.forEach((log, index) => {
+                log.isHighlighted = checkHighlight(log, filterState);
+                if (log.isHighlighted) {
+                    highlightedIndices.push(index);
+                }
+            });
+
+            updateHighlightCount();
+            renderLogs(filteredLogs);
+            updateIndicator(filteredLogs);
+            updateLogCount();
+        }
+
+        // ===== 하이라이트 네비게이션 =====
+        function updateHighlightCount() {
+            const countEl = document.getElementById('highlight-count');
+            if (!countEl) return;
+
+            if (highlightedIndices.length === 0) {
+                currentHighlightPos = -1;
+                countEl.textContent = '0/0';
+            } else {
+                if (currentHighlightPos < 0) currentHighlightPos = 0;
+                if (currentHighlightPos >= highlightedIndices.length) currentHighlightPos = highlightedIndices.length - 1;
+                countEl.textContent = `${currentHighlightPos + 1}/${highlightedIndices.length}`;
+            }
+        }
+
+        function navigateHighlight(direction) {
+            if (highlightedIndices.length === 0) {
+                setStatus('하이라이트된 항목이 없습니다');
+                return;
+            }
+
+            currentHighlightPos += direction;
+
+            if (currentHighlightPos < 0) {
+                currentHighlightPos = highlightedIndices.length - 1;
+            } else if (currentHighlightPos >= highlightedIndices.length) {
+                currentHighlightPos = 0;
+            }
+
+            updateHighlightCount();
+
+            const targetIndex = highlightedIndices[currentHighlightPos];
+            scrollToRow(targetIndex);
+            selectRow(targetIndex);
+        }
+
+        function scrollToRow(index) {
+            const container = document.querySelector('.log-table-container');
+            if (!container) return;
+
+            if (virtualScroll.enabled) {
+                const scrollTop = index * virtualScroll.rowHeight - container.clientHeight / 2;
+                container.scrollTop = Math.max(0, scrollTop);
+            } else {
+                const row = container.querySelector(`tr[data-index="${index}"]`);
+                if (row) {
+                    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }
+        }
+
+        function selectRow(index) {
+            // index 기반으로 선택 상태 저장
+            selectedLogIndex = index;
+
+            // 모든 행의 선택 상태 업데이트
+            document.querySelectorAll('.log-table tr[data-index]').forEach(r => {
+                const rIndex = parseInt(r.dataset.index);
+                if (rIndex === selectedLogIndex) {
+                    r.classList.add('log-row-selected');
+                } else {
+                    r.classList.remove('log-row-selected');
+                }
+            });
+        }
+
+        // ===== 렌더링 함수 =====
+        function renderLogs(logs) {
+            const container = document.querySelector('.log-table-container');
+            const tbody = document.querySelector('.log-table tbody');
+
+            // 기존 spacer 제거 (있으면)
+            const oldSpacer = container.querySelector('.virtual-scroll-spacer');
+            if (oldSpacer) oldSpacer.remove();
+
+            virtualScroll.enabled = logs.length >= virtualScroll.threshold;
+
+            // DOM 풀 초기화 (최초 1회)
+            if (!rowPool.initialized) {
+                rowPool.init(tbody);
+                setupEventDelegation(tbody);
+            }
+
+            if (!virtualScroll.enabled) {
+                renderAllRowsWithPool(logs, tbody);
+                return;
+            }
+
+            const containerHeight = container.clientHeight;
+            const visibleRows = Math.ceil(containerHeight / virtualScroll.rowHeight) || 30;
+
+            virtualScroll.visibleStart = 0;
+            virtualScroll.visibleEnd = Math.min(visibleRows + virtualScroll.bufferSize * 2, logs.length);
+            renderVisibleRowsWithPool(logs, 0, virtualScroll.visibleEnd);
+
+            // 스크롤 핸들러 - requestAnimationFrame 기반
+            // 항상 최신 스크롤 위치에서 렌더링하여 뷰포트 누락 방지
+            let pendingRender = false;
+
+            container.onscroll = () => {
+                // 자동 스크롤 상태 업데이트 (항상 즉시 처리)
+                const scrollTop = container.scrollTop;
+                const scrollHeight = container.scrollHeight;
+                const clientHeight = container.clientHeight;
+                const isNearBottom = scrollHeight - scrollTop - clientHeight < 50;
+
+                autoScroll = isNearBottom;
+                updateAutoScrollStatus();
+
+                if (!virtualScroll.enabled) return;
+
+                // 다음 프레임에 렌더링 예약 (중복 방지)
+                if (!pendingRender) {
+                    pendingRender = true;
+                    requestAnimationFrame(() => {
+                        pendingRender = false;
+
+                        // 현재(최신) 스크롤 위치 사용
+                        const currentScrollTop = container.scrollTop;
+                        const currentClientHeight = container.clientHeight;
+
+                        const currentVisibleRows = Math.ceil(currentClientHeight / virtualScroll.rowHeight) || 30;
+                        const startIndex = Math.max(0, Math.floor(currentScrollTop / virtualScroll.rowHeight) - virtualScroll.bufferSize);
+                        const endIndex = Math.min(logs.length, startIndex + currentVisibleRows + virtualScroll.bufferSize * 2);
+
+                        if (startIndex !== virtualScroll.visibleStart || endIndex !== virtualScroll.visibleEnd) {
+                            virtualScroll.visibleStart = startIndex;
+                            virtualScroll.visibleEnd = endIndex;
+                            renderVisibleRowsWithPool(logs, startIndex, endIndex);
+                        }
+                    });
+                }
+            };
+        }
+
+        // Event Delegation 설정 (tbody에 단일 리스너)
+        function setupEventDelegation(tbody) {
+            tbody.addEventListener('click', function(e) {
+                const row = e.target.closest('tr[data-index]');
+                if (!row) return;
+
+                // JSON 클릭 처리
+                if (e.target.classList.contains('json-preview')) {
+                    toggleJsonExpand(e.target);
+                    return;
+                }
+
+                // 행 선택 (index 기반으로 저장)
+                const index = parseInt(row.dataset.index);
+                if (!isNaN(index)) {
+                    selectedLogIndex = index;
+
+                    // 행 선택 시 자동 스크롤 OFF (화면 고정, 로그는 계속 쌓임)
+                    autoScroll = false;
+                    updateAutoScrollStatus();
+
+                    // 모든 행의 선택 상태 업데이트
+                    document.querySelectorAll('.log-table tr[data-index]').forEach(r => {
+                        const rIndex = parseInt(r.dataset.index);
+                        if (rIndex === selectedLogIndex) {
+                            r.classList.add('log-row-selected');
+                        } else {
+                            r.classList.remove('log-row-selected');
+                        }
+                    });
+                }
+            });
+
+            tbody.addEventListener('dblclick', function(e) {
+                const row = e.target.closest('tr[data-index]');
+                if (!row) return;
+
+                const index = parseInt(row.dataset.index);
+                if (!isNaN(index) && filteredLogs[index]) {
+                    const log = filteredLogs[index];
+                    log.isBookmarked = !log.isBookmarked;
+
+                    // 해당 행만 업데이트 (전체 재렌더링 없이)
+                    updateSingleRow(row, log, index);
+                    updateIndicator(filteredLogs);
+                }
+            });
+        }
+
+        // 단일 행 업데이트 (북마크 토글 등)
+        function updateSingleRow(row, log, index) {
+            const highlightKeyword = document.getElementById('highlight-enabled')?.checked ?
+                document.getElementById('highlight-keyword')?.value || '' : '';
+
+            // 행 클래스 업데이트
+            row.className = 'border-b border-gray-200 dark:border-gray-700';
+            if (index === selectedLogIndex) {
+                row.classList.add('log-row-selected');
+            } else if (log.isBookmarked) {
+                row.classList.add('log-row-bookmark');
+            } else if (log.isHighlighted) {
+                row.classList.add('log-row-highlight');
+            } else if (log.level === 'ERROR' || log.level === 'FATAL') {
+                row.classList.add('log-row-error');
+            } else if (log.level === 'WARN') {
+                row.classList.add('log-row-warn');
+            } else {
+                row.classList.add('hover:bg-gray-100', 'dark:hover:bg-gray-800');
+            }
+
+            // 북마크 셀 업데이트
+            const bookmarkCell = row.querySelector('.cell-bookmark');
+            if (bookmarkCell) {
+                bookmarkCell.textContent = log.isBookmarked ? '★' : '';
+            }
+        }
+
+        // DOM 풀을 사용한 모든 행 렌더링 (가상 스크롤 비활성화 시)
+        function renderAllRowsWithPool(logs, tbody) {
+            const highlightKeyword = document.getElementById('highlight-enabled')?.checked ?
+                document.getElementById('highlight-keyword')?.value || '' : '';
+
+            rowPool.updatePadding(0, 0);
+
+            const displayCount = Math.min(logs.length, rowPool.poolSize);
+
+            for (let i = 0; i < rowPool.poolSize; i++) {
+                if (i < displayCount) {
+                    rowPool.updateRow(rowPool.rows[i], logs[i], i, highlightKeyword);
+                } else {
+                    rowPool.hideRow(rowPool.rows[i]);
+                }
+            }
+        }
+
+        // DOM 풀을 사용한 가시 영역 렌더링 (가상 스크롤)
+        function renderVisibleRowsWithPool(logs, startIndex, endIndex) {
+            const highlightKeyword = document.getElementById('highlight-enabled')?.checked ?
+                document.getElementById('highlight-keyword')?.value || '' : '';
+
+            const topPadding = startIndex * virtualScroll.rowHeight;
+            const bottomPadding = Math.max(0, (logs.length - endIndex) * virtualScroll.rowHeight);
+
+            rowPool.updatePadding(topPadding, bottomPadding);
+
+            const visibleCount = endIndex - startIndex;
+
+            for (let i = 0; i < rowPool.poolSize; i++) {
+                if (i < visibleCount) {
+                    const logIndex = startIndex + i;
+                    rowPool.updateRow(rowPool.rows[i], logs[logIndex], logIndex, highlightKeyword);
+                } else {
+                    rowPool.hideRow(rowPool.rows[i]);
+                }
+            }
+        }
+
+        // 레거시 함수 (하위 호환성)
+        function renderAllRows(logs, tbody) {
+            const highlightKeyword = document.getElementById('highlight-enabled')?.checked ?
+                document.getElementById('highlight-keyword')?.value || '' : '';
+
+            tbody.innerHTML = logs.map((log, index) => renderRow(log, index, highlightKeyword)).join('');
+            attachRowEvents();
+        }
+
+        function renderVisibleRows(logs, tbody, startIndex, endIndex) {
+            const highlightKeyword = document.getElementById('highlight-enabled')?.checked ?
+                document.getElementById('highlight-keyword')?.value || '' : '';
+
+            const topPadding = startIndex * virtualScroll.rowHeight;
+            const bottomPadding = (logs.length - endIndex) * virtualScroll.rowHeight;
+
+            let html = '';
+            if (topPadding > 0) {
+                html += `<tr style="height: ${topPadding}px;"><td colspan="6"></td></tr>`;
+            }
+
+            for (let i = startIndex; i < endIndex; i++) {
+                html += renderRow(logs[i], i, highlightKeyword);
+            }
+
+            if (bottomPadding > 0) {
+                html += `<tr style="height: ${bottomPadding}px;"><td colspan="6"></td></tr>`;
+            }
+
+            tbody.innerHTML = html;
+            attachRowEvents();
+        }
+
+        function renderRow(log, index, highlightKeyword) {
+            let rowClass = 'hover:bg-gray-100 dark:hover:bg-gray-800';
+            if (log.isBookmarked) rowClass = 'log-row-bookmark';
+            else if (log.isHighlighted) rowClass = 'log-row-highlight';
+            else if (log.level === 'ERROR' || log.level === 'FATAL') rowClass = 'log-row-error';
+            else if (log.level === 'WARN') rowClass = 'log-row-warn';
+
+            let message = formatMessage(log.message, highlightKeyword);
+
+            return `<tr class="${rowClass} border-b border-gray-200 dark:border-gray-700" data-index="${index}" style="height: ${virtualScroll.rowHeight}px;">
+                <td class="w-8 text-center text-yellow-500">${log.isBookmarked ? '★' : ''}</td>
+                <td class="w-44 px-1">${log.dateTime}</td>
+                <td class="w-14 text-center font-bold level-${log.level}">${log.level}</td>
+                <td class="w-36 px-1 text-purple-600 dark:text-purple-400 truncate">${escapeHtml(log.thread)}</td>
+                <td class="w-48 px-1 text-green-700 dark:text-green-400 truncate">${escapeHtml(log.class)}</td>
+                <td class="min-w-[400px] px-1">${message}</td>
+            </tr>`;
+        }
+
+        // 메시지 포맷팅 (JSON 감지 및 하이라이트)
+        function formatMessage(rawMessage, highlightKeyword) {
+            // JSON 패턴 감지: {...} 또는 [...]
+            const jsonRegex = /(\{[\s\S]*\}|\[[\s\S]*\])/g;
+            let message = escapeHtml(rawMessage);
+
+            // JSON 데이터가 포함되어 있는지 확인
+            const jsonMatches = rawMessage.match(jsonRegex);
+            if (jsonMatches) {
+                jsonMatches.forEach(jsonStr => {
+                    try {
+                        JSON.parse(jsonStr); // 유효한 JSON인지 확인
+                        const escapedJson = escapeHtml(jsonStr);
+                        const preview = jsonStr.length > 80 ? escapeHtml(jsonStr.substring(0, 80)) + '...' : escapedJson;
+                        const replacement = `<span class="json-preview text-blue-600 dark:text-blue-400" data-json="${escapedJson.replace(/"/g, '&quot;')}" title="클릭하여 JSON 확장">${preview}</span>`;
+                        message = message.replace(escapedJson, replacement);
+                    } catch (e) {
+                        // JSON 파싱 실패 - 원본 유지
+                    }
+                });
+            }
+
+            // Word Filter (Find) 매칭 텍스트 컬러링 (녹색)
+            const wordFindInput = document.getElementById('word-find');
+            const wordFindValue = wordFindInput ? wordFindInput.value.trim() : '';
+            if (wordFindValue) {
+                const findKeywords = wordFindValue.split('|').map(k => k.trim()).filter(k => k);
+                findKeywords.forEach(keyword => {
+                    const regex = new RegExp(`(${escapeRegex(keyword)})`, 'gi');
+                    message = message.replace(regex, '<span class="word-filter-match">$1</span>');
+                });
+            }
+
+            // 하이라이트 키워드 적용 (노란색 배경)
+            if (highlightKeyword) {
+                const keywords = highlightKeyword.split('|').map(k => k.trim()).filter(k => k);
+                keywords.forEach(keyword => {
+                    const regex = new RegExp(`(${escapeRegex(keyword)})`, 'gi');
+                    message = message.replace(regex, '<span class="keyword-match">$1</span>');
+                });
+            }
+
+            return message;
+        }
+
+        function updateIndicator(logs) {
+            const leftContainer = document.querySelector('.indicator-left');
+            const rightContainer = document.querySelector('.indicator-right');
+
+            if (!leftContainer || !rightContainer) return;
+
+            leftContainer.innerHTML = '';
+            rightContainer.innerHTML = '';
+
+            if (logs.length === 0) return;
+
+            const containerHeight = leftContainer.clientHeight || 300;
+
+            logs.forEach((log, index) => {
+                const top = (index / logs.length) * containerHeight;
+
+                if (log.isHighlighted) {
+                    leftContainer.innerHTML += `<div class="indicator-marker absolute w-full h-1 bg-yellow-400 cursor-pointer hover:h-2 transition-all" style="top: ${top}px" data-index="${index}" title="하이라이트 #${index + 1}"></div>`;
+                } else if (log.isBookmarked) {
+                    leftContainer.innerHTML += `<div class="indicator-marker absolute w-full h-1 bg-blue-400 cursor-pointer hover:h-2 transition-all" style="top: ${top}px" data-index="${index}" title="북마크 #${index + 1}"></div>`;
+                }
+
+                if (log.level === 'ERROR' || log.level === 'FATAL') {
+                    rightContainer.innerHTML += `<div class="indicator-marker absolute w-full h-1 bg-red-500 cursor-pointer hover:h-2 transition-all" style="top: ${top}px" data-index="${index}" title="에러 #${index + 1}"></div>`;
+                } else if (log.level === 'WARN') {
+                    rightContainer.innerHTML += `<div class="indicator-marker absolute w-full h-1 bg-orange-400 cursor-pointer hover:h-2 transition-all" style="top: ${top}px" data-index="${index}" title="경고 #${index + 1}"></div>`;
+                }
+            });
+
+            // 인디케이터 클릭 이벤트 (이벤트 위임)
+            [leftContainer, rightContainer].forEach(container => {
+                container.onclick = function(e) {
+                    const marker = e.target.closest('.indicator-marker');
+                    if (!marker) return;
+
+                    const index = parseInt(marker.dataset.index);
+                    if (!isNaN(index)) {
+                        scrollToRow(index);
+                        selectRow(index);
+                    }
+                };
+            });
+        }
+
+        function updateLogCount() {
+            document.getElementById('log-count-value').textContent = allLogs.length;
+            document.getElementById('display-count').textContent = `표시: ${filteredLogs.length}줄`;
+        }
+
+        function setStatus(message) {
+            document.getElementById('status-text').textContent = message;
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function escapeRegex(str) {
+            return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        function attachRowEvents() {
+            document.querySelectorAll('.log-table tbody tr[data-index]').forEach(row => {
+                row.addEventListener('click', function(e) {
+                    // JSON 클릭 처리
+                    if (e.target.classList.contains('json-preview')) {
+                        toggleJsonExpand(e.target);
+                        return;
+                    }
+
+                    document.querySelectorAll('.log-table tr.log-row-selected').forEach(r => r.classList.remove('log-row-selected'));
+                    this.classList.add('log-row-selected');
+                });
+
+                row.addEventListener('dblclick', function() {
+                    const index = parseInt(this.dataset.index);
+                    if (!isNaN(index) && filteredLogs[index]) {
+                        filteredLogs[index].isBookmarked = !filteredLogs[index].isBookmarked;
+                        applyFilter();
+                    }
+                });
+            });
+        }
+
+        // JSON 토글 함수
+        function toggleJsonExpand(element) {
+            const isExpanded = element.classList.contains('json-expanded');
+            const originalJson = element.dataset.json;
+
+            if (isExpanded) {
+                element.classList.remove('json-expanded');
+                element.classList.add('json-preview');
+                element.textContent = originalJson.length > 100 ? originalJson.substring(0, 100) + '...' : originalJson;
+            } else {
+                try {
+                    const parsed = JSON.parse(originalJson);
+                    const formatted = JSON.stringify(parsed, null, 2);
+                    element.classList.remove('json-preview');
+                    element.classList.add('json-expanded');
+                    element.textContent = formatted;
+                } catch (e) {
+                    element.textContent = originalJson;
+                }
+            }
+        }
+
+        // ===== 초기화 =====
+        function setupEventListeners() {
+            podSearch.init();
+
+            document.getElementById('context')?.addEventListener('change', () => {
+                saveSettings();
+                loadNamespaces();
+            });
+            document.getElementById('namespace')?.addEventListener('change', () => {
+                saveSettings();
+                loadPods();
+            });
+
+            document.querySelectorAll('fieldset input').forEach(input => {
+                input.addEventListener('change', () => {
+                    invalidateFilterCache();  // 즉시 캐시 무효화
+                    applyFilter();
+                    updateFilterInputStyles();
+                });
+                // 입력 시 즉시 캐시 무효화, 전체 필터는 debounce
+                input.addEventListener('input', () => {
+                    invalidateFilterCache();  // 즉시 캐시 무효화 (스트리밍 중 새 로그용)
+                    updateFilterInputStyles();
+                });
+                input.addEventListener('input', debounce(() => {
+                    applyFilter();  // 전체 필터링은 debounce
+                }, 300));
+            });
+
+            // 초기 필터 입력 스타일 설정
+            updateFilterInputStyles();
+
+            document.getElementById('font-apply')?.addEventListener('click', () => {
+                const fontSize = document.getElementById('font-size')?.value || 12;
+                document.querySelector('.log-table').style.fontSize = fontSize + 'px';
+            });
+
+            document.getElementById('goto-line')?.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    const line = parseInt(e.target.value);
+                    if (line) {
+                        const row = document.querySelector(`.log-table tbody tr[data-index="${line - 1}"]`);
+                        if (row) {
+                            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            selectRow(line - 1);
+                        }
+                    }
+                }
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'F3' && !e.shiftKey) {
+                    e.preventDefault();
+                    navigateHighlight(1);
+                } else if (e.key === 'F3' && e.shiftKey) {
+                    e.preventDefault();
+                    navigateHighlight(-1);
+                } else if (e.key === 'g' && e.ctrlKey) {
+                    e.preventDefault();
+                    document.getElementById('goto-line')?.focus();
+                } else if (e.key === 'Escape') {
+                    const activeEl = document.activeElement;
+                    if (activeEl?.tagName === 'INPUT') {
+                        activeEl.blur();
+                    }
+                }
+            });
+        }
+
+        function debounce(func, wait) {
+            let timeout;
+            return function(...args) {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(this, args), wait);
+            };
+        }
+
+        // 필터 입력 스타일 업데이트 (체크박스 상태에 따라)
+        function updateFilterInputStyles() {
+            const filterPairs = [
+                ['word-find', 'word-find-enabled'],
+                ['word-remove', 'word-remove-enabled'],
+                ['class-show', 'class-show-enabled'],
+                ['class-remove', 'class-remove-enabled'],
+                ['highlight-keyword', 'highlight-enabled']
+            ];
+
+            filterPairs.forEach(([inputId, checkboxId]) => {
+                const input = document.getElementById(inputId);
+                const checkbox = document.getElementById(checkboxId);
+                if (input && checkbox) {
+                    if (checkbox.checked) {
+                        input.classList.remove('filter-disabled');
+                    } else {
+                        input.classList.add('filter-disabled');
+                    }
+                }
+            });
+        }
+
+        // 글로벌 에러 핸들러
+        window.onerror = function(msg, url, line, col, error) {
+            console.error('[GLOBAL ERROR]', msg, 'at', line, ':', col);
+            setStatus('JS 오류: ' + msg);
+            return false;
+        };
+
+        // 테스트용 전역 함수 노출
+        window.applyFilter = applyFilter;
+        window.renderLogs = renderLogs;
+        window.addLogEntry = addLogEntry;
+
+        window.onload = function() {
+            // 배열 참조 재설정 (페이지 로드 후)
+            window.allLogs = allLogs;
+            window.filteredLogs = filteredLogs;
+
+            loadTheme();
+            applySettings();  // tail 설정 등 로드
+            updatePresetDropdown();
+            setupEventListeners();
+            loadContexts();
+
+            // 초기 메시지 표시 (풀 초기화 전)
+            const tbody = document.querySelector('.log-table tbody');
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-5 text-gray-500 dark:text-gray-400">Pod를 선택하고 연결하세요</td></tr>';
+        };
+    </script>
+
+</body>
+</html>
