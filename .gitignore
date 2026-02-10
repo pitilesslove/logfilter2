@@ -17,3 +17,7 @@ test-results/
 
 # OS files
 .DS_Store
+
+# Project docs (local only)
+.claude/
+TODO.md
