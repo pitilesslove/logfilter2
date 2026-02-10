@@ -6,7 +6,7 @@
 |------|------|
 | **프로젝트명** | K8s Log Viewer v2.0 |
 | **개발 기간** | 2024년 1월 ~ 2월 |
-| **기술 스택** | Kotlin, TornadoFX, Tailwind CSS, SSE |
+| **기술 스택** | Node.js, Express, Tailwind CSS, SSE |
 | **목표** | Kubernetes Pod 로그를 실시간으로 조회하고 필터링하는 웹 기반 로그 뷰어 |
 
 ---
@@ -23,6 +23,7 @@
 - **단어 필터**: Find (포함) / Remove (제외) - `|`로 복수 키워드 지원
 - **클래스 필터**: Show / Remove - 특정 클래스만 표시/제외
 - **하이라이트**: 키워드 노란색 강조 표시
+- **개별 필터 ON/OFF**: 각 필터별 활성화 체크박스
 
 ### 3. 검색 네비게이션
 - **F3**: 다음 하이라이트로 이동
@@ -41,14 +42,15 @@
 - localStorage에 설정 저장
 - 원클릭 토글 버튼
 
-### 6. 로그 다운로드
+### 6. 로그 다운로드 & 파일 열기
 - 현재 필터링된 로그를 텍스트 파일로 다운로드
 - 파일명 형식: `{pod명}-{timestamp}.log`
-- 전체 로그 또는 필터링된 로그만 다운로드 가능
+- 전체 로그 다운로드 기능
+- 로컬 로그 파일 불러오기 지원
 
 ### 7. 가상 스크롤 (Virtual Scrolling)
 - 1000줄 이상의 대용량 로그 최적화
-- DOM 요소 최소화로 메모리 효율성 향상
+- DOM 풀 재사용 패턴으로 메모리 효율성 향상
 - 부드러운 스크롤 성능
 
 ### 8. 실시간 로그 스트리밍 (SSE)
@@ -56,26 +58,28 @@
 - 자동 재연결 지원
 - 스트림 시작/중지 제어
 
+### 9. 스크롤 위치 보존
+- 필터 변경 시 현재 화면 중심 라인 유지
+- 자동스크롤 OFF 상태에서만 동작
+- 바이너리 서치로 최적의 위치 탐색
+
 ---
 
 ## 🛠 기술 구현
 
-### 백엔드 (Kotlin)
-```kotlin
-// WebServer.kt - 핵심 구조
-class WebServer(private val port: Int = 8888) {
-    private val parser = LogParser()
-    private val k8sService = K8sService()
+### 백엔드 (Node.js + Express)
+```javascript
+// server/index.js - 핵심 구조
+const express = require('express');
+const app = express();
 
-    // SSE 스트리밍
-    private fun startLogStream(exchange: HttpExchange, pod: String, ...)
+// 라우터
+app.use('/api/k8s', require('./routes/k8s'));
 
-    // REST API 엔드포인트
-    server?.createContext("/api/k8s/contexts") { ... }
-    server?.createContext("/api/k8s/namespaces") { ... }
-    server?.createContext("/api/k8s/pods") { ... }
-    server?.createContext("/api/k8s/logs/stream") { ... }
-}
+// 정적 파일 서빙
+app.get('/', (req, res) => {
+    res.sendFile('samples/ui-mockup.html');
+});
 ```
 
 ### 프론트엔드 (Tailwind CSS)
@@ -106,27 +110,10 @@ tailwind.config = {
 | `/api/k8s/contexts` | GET | Context 목록 조회 |
 | `/api/k8s/namespaces` | GET | Namespace 목록 조회 |
 | `/api/k8s/pods` | GET | Pod 목록 조회 |
+| `/api/k8s/logs` | GET | Pod 로그 조회 (tail) |
+| `/api/k8s/logs/all` | GET | Pod 전체 로그 조회 |
 | `/api/k8s/logs/stream` | GET (SSE) | 로그 스트리밍 시작 |
-| `/api/k8s/logs/stream/stop` | POST | 로그 스트리밍 중지 |
-| `/api/logs` | GET | 현재 로그 조회 |
-| `/api/load` | GET | 샘플 로그 로드 |
-| `/api/clear` | POST | 로그 클리어 |
-
----
-
-## 📸 스크린샷
-
-### 1. 라이트 모드
-![라이트 모드](k8s-logviewer-light-mode.png)
-
-### 2. 다크 모드
-![다크 모드](k8s-logviewer-dark-mode.png)
-
-### 3. 하이라이트 기능
-![하이라이트](k8s-logviewer-highlight.png)
-
-### 4. 필터링 적용 (WARN/ERROR/FATAL만 표시)
-![필터링](k8s-logviewer-filtered.png)
+| `/api/k8s/logs/stream/stop` | GET | 로그 스트리밍 중지 |
 
 ---
 
@@ -134,25 +121,23 @@ tailwind.config = {
 
 ```
 logfilter/
-├── build.gradle.kts              # Gradle Kotlin DSL
-├── SPEC.md                       # 전체 스펙 문서
-├── REPORT.md                     # 이 보고서
+├── server/                    # Express 서버
+│   ├── index.js              # 서버 진입점
+│   ├── routes/
+│   │   └── k8s.js            # K8s API 라우터
+│   └── services/
+│       ├── k8sClient.js      # kubectl 래퍼
+│       ├── logParser.js      # 로그 파서
+│       └── logStore.js       # 로그 저장소
 ├── samples/
-│   ├── ui-mockup.html            # 웹 UI 메인 파일 (Tailwind)
-│   ├── ui-mockup-legacy.html     # 백업 (이전 CSS 버전)
-│   └── spring-boot-sample.log    # 샘플 로그 파일
-├── src/main/kotlin/com/logfilter/
-│   ├── web/
-│   │   └── WebServer.kt          # 웹 서버 + SSE
-│   ├── service/
-│   │   ├── K8sService.kt         # kubectl 명령 실행
-│   │   └── LogParser.kt          # 로그 파싱
-│   ├── model/
-│   │   ├── LogEntry.kt           # 로그 데이터 클래스
-│   │   └── PodInfo.kt            # Pod 정보
-│   └── view/
-│       └── ...                   # TornadoFX UI (데스크톱)
-└── k8s-logviewer-*.png           # 스크린샷 이미지
+│   ├── ui-mockup.html        # 웹 UI 메인 파일
+│   ├── ui-mockup-legacy.html # 백업 (이전 버전)
+│   ├── spring-boot-sample.log
+│   └── ums-log-sample.log
+├── package.json              # Node.js 설정
+├── README.md                 # 프로젝트 문서
+├── SPEC.md                   # 상세 스펙 문서
+└── REPORT.md                 # 이 보고서
 ```
 
 ---
@@ -170,30 +155,36 @@ logfilter/
 
 ## ✅ 완료된 작업
 
+- [x] Node.js/Express 서버로 전환 (Kotlin → JavaScript)
 - [x] Tailwind CSS 전환 (CDN 기반)
 - [x] 다크/라이트 모드 구현
 - [x] 검색 결과 네비게이션 (F3/Shift+F3)
 - [x] 로그 다운로드 기능
+- [x] 전체 로그 다운로드 기능
+- [x] 로컬 파일 열기 기능
 - [x] 필터 프리셋 저장/로드/삭제
 - [x] 개별 필터 활성화 체크박스
-- [x] 가상 스크롤 구현
+- [x] 가상 스크롤 구현 (DOM 풀 재사용)
 - [x] SSE 실시간 스트리밍
-- [x] SPEC.md 문서 업데이트 (섹션 11 추가)
-- [x] WebServer.kt 컴파일 오류 수정
+- [x] 필터 변경 시 스크롤 위치 보존
+- [x] 자동스크롤 상태 관리 개선
 
 ---
 
 ## 🚀 실행 방법
 
 ```bash
-# 웹 서버 실행
-./gradlew runWeb
+# 의존성 설치
+npm install
+
+# 서버 실행
+npm start
+
+# 개발 모드 (파일 변경 시 자동 재시작)
+npm run dev
 
 # 브라우저에서 접속
 open http://localhost:8888
-
-# 데스크톱 앱 실행 (TornadoFX)
-./gradlew run
 ```
 
 ---
@@ -208,5 +199,5 @@ open http://localhost:8888
 
 ---
 
-*Generated: 2024-02-07*
+*Generated: 2024-02-10*
 *Author: Claude Code*

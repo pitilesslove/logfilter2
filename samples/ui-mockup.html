@@ -107,6 +107,12 @@
             background-color: #1f2937;
         }
 
+        /* 로그 테이블 컨테이너 - 연쇄 스크롤 방지 */
+        .log-table-container {
+            overflow-anchor: none;  /* 브라우저 자동 스크롤 조정 비활성화 */
+            scroll-behavior: auto;  /* smooth 비활성화 */
+        }
+
         /* 필터 입력 컬러링 */
         #word-find:not(:placeholder-shown) {
             color: #16a34a;
@@ -369,8 +375,11 @@
         <div class="flex items-center gap-3">
             <span class="text-sm font-semibold">로그: <strong id="log-count-value">0</strong>줄</span>
             <button id="connect-btn" onclick="connectPod()" class="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-sm transition-colors">▶ 시작</button>
-            <button onclick="loadSampleLogs()" class="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm hover:bg-gray-200 dark:hover:bg-gray-700 bg-white dark:bg-gray-700">📥 샘플 로드</button>
+            <button id="fetch-all-btn" onclick="fetchAllLogs()" class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm transition-colors" title="Pod의 전체 로그를 한번에 가져옵니다">📥 전체 로그</button>
+            <button onclick="loadSampleLogs()" class="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm hover:bg-gray-200 dark:hover:bg-gray-700 bg-white dark:bg-gray-700">📋 샘플</button>
             <button onclick="downloadLogs()" class="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm hover:bg-gray-200 dark:hover:bg-gray-700 bg-white dark:bg-gray-700">💾 다운로드</button>
+            <button onclick="document.getElementById('file-input').click()" class="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm hover:bg-gray-200 dark:hover:bg-gray-700 bg-white dark:bg-gray-700" title="로그 파일 열기">📂 파일 열기</button>
+            <input type="file" id="file-input" accept=".log,.txt" class="hidden" onchange="loadLogFile(event)">
             <button onclick="clearLogs()" class="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded text-sm transition-colors">🗑 클리어</button>
         </div>
     </div>
@@ -400,6 +409,7 @@
             <table class="log-table w-full border-collapse text-xs">
                 <thead class="sticky top-0 z-10">
                     <tr class="bg-gray-200 dark:bg-gray-800">
+                        <th class="w-14 text-right py-2 px-2 border-b-2 border-gray-300 dark:border-gray-600 font-semibold text-gray-500">#</th>
                         <th class="w-8 text-center py-2 px-1 border-b-2 border-gray-300 dark:border-gray-600 font-semibold text-yellow-500">★</th>
                         <th class="w-44 text-left py-2 px-1 border-b-2 border-gray-300 dark:border-gray-600 font-semibold">DateTime</th>
                         <th class="w-14 text-center py-2 px-1 border-b-2 border-gray-300 dark:border-gray-600 font-semibold">Level</th>
@@ -409,7 +419,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    <tr><td colspan="6" class="text-center py-5 text-gray-500 dark:text-gray-400">Pod를 선택하고 연결하세요</td></tr>
+                    <tr><td colspan="7" class="text-center py-5 text-gray-500 dark:text-gray-400">Pod를 선택하고 연결하세요</td></tr>
                 </tbody>
             </table>
         </div>
@@ -440,25 +450,30 @@
         let isStreaming = false;
         let autoScroll = true;
 
-        // 테스트용 전역 노출
-        window.allLogs = allLogs;
-        window.filteredLogs = filteredLogs;
-
         // 하이라이트 네비게이션 상태
         let highlightedIndices = [];
         let currentHighlightPos = -1;
 
-        // 선택된 행 상태 (index 기반으로 유지)
-        let selectedLogIndex = -1;
+        // 선택된 행 상태 (다중 선택 지원)
+        let selectedLogIndices = new Set();  // 선택된 인덱스들
+        let lastSelectedIndex = -1;          // 마지막 선택 (Shift 범위 선택용)
+        let selectedLogIndex = -1;           // 레거시 호환용
+
+        // 테스트용 전역 노출
+        window.allLogs = allLogs;
+        window.filteredLogs = filteredLogs;
+        window.selectedLogIndices = selectedLogIndices;
 
         // 가상 스크롤 설정
         const virtualScroll = {
             rowHeight: 28,
-            bufferSize: 20,
+            bufferSize: 50,           // 버퍼 크기 증가 (연쇄 스크롤 방지)
             visibleStart: 0,
             visibleEnd: 0,
             enabled: true,
-            threshold: 1000
+            threshold: 1000,
+            lastScrollTop: 0,         // 마지막 스크롤 위치
+            scrollThreshold: 50       // 최소 스크롤 변화량 (px) - 낮을수록 반응성 좋음
         };
 
         // ===== DOM 풀 재사용 =====
@@ -475,7 +490,7 @@
 
                 // 상단 패딩 행
                 this.topPaddingRow = document.createElement('tr');
-                this.topPaddingRow.innerHTML = '<td colspan="6"></td>';
+                this.topPaddingRow.innerHTML = '<td colspan="7"></td>';
                 this.topPaddingRow.style.height = '0px';
                 this.topPaddingRow.classList.add('pool-padding-top');
 
@@ -488,7 +503,7 @@
 
                 // 하단 패딩 행
                 this.bottomPaddingRow = document.createElement('tr');
-                this.bottomPaddingRow.innerHTML = '<td colspan="6"></td>';
+                this.bottomPaddingRow.innerHTML = '<td colspan="7"></td>';
                 this.bottomPaddingRow.style.height = '0px';
                 this.bottomPaddingRow.classList.add('pool-padding-bottom');
 
@@ -507,6 +522,7 @@
                 row.className = 'hover:bg-gray-100 dark:hover:bg-gray-800 border-b border-gray-200 dark:border-gray-700';
                 row.style.height = virtualScroll.rowHeight + 'px';
                 row.innerHTML = `
+                    <td class="w-14 text-right px-2 text-gray-400 dark:text-gray-500 font-mono text-xs cell-line"></td>
                     <td class="w-8 text-center text-yellow-500 cell-bookmark"></td>
                     <td class="w-44 px-1 cell-datetime"></td>
                     <td class="w-14 text-center font-bold cell-level"></td>
@@ -525,8 +541,8 @@
                 // 행 클래스 업데이트
                 row.className = 'border-b border-gray-200 dark:border-gray-700';
 
-                // 선택된 행 상태 유지 (최우선)
-                if (index === selectedLogIndex) {
+                // 선택된 행 상태 유지 (최우선, 다중 선택 지원)
+                if (selectedLogIndices.has(index)) {
                     row.classList.add('log-row-selected');
                 } else if (log.isBookmarked) {
                     row.classList.add('log-row-bookmark');
@@ -541,6 +557,7 @@
                 }
 
                 // 셀 업데이트 (textContent 사용 - innerHTML보다 빠름)
+                row.querySelector('.cell-line').textContent = log.line || '';
                 row.querySelector('.cell-bookmark').textContent = log.isBookmarked ? '★' : '';
                 row.querySelector('.cell-datetime').textContent = log.dateTime || '';
 
@@ -551,12 +568,14 @@
                 row.querySelector('.cell-thread').textContent = log.thread || '';
                 row.querySelector('.cell-class').textContent = log.class || '';
 
-                // 메시지는 하이라이트 때문에 innerHTML 사용 (필요시만)
+                // 메시지는 하이라이트/JSON 때문에 innerHTML 사용 (필요시만)
                 const msgCell = row.querySelector('.cell-message');
-                if (highlightKeyword || this.hasWordFilter()) {
-                    msgCell.innerHTML = formatMessage(log.message || '', highlightKeyword);
+                const msg = log.message || '';
+                const hasJson = msg.includes('{') || msg.includes('[');
+                if (highlightKeyword || this.hasWordFilter() || hasJson) {
+                    msgCell.innerHTML = formatMessage(msg, highlightKeyword, log.jsonExpanded);
                 } else {
-                    msgCell.textContent = log.message || '';
+                    msgCell.textContent = msg;
                 }
             },
 
@@ -798,7 +817,7 @@
         const STORAGE_KEY = 'k8s-log-viewer-settings';
 
         // 기본 tail 라인 수
-        const DEFAULT_TAIL_COUNT = 2000;
+        const DEFAULT_TAIL_COUNT = 5000;
 
         function saveSettings() {
             const settings = {
@@ -1044,6 +1063,62 @@
             startStream(pod, namespace, context);
         }
 
+        // ===== 전체 로그 다운로드 (스트리밍 없이) =====
+        async function fetchAllLogs() {
+            const pod = document.getElementById('pod')?.value;
+            const namespace = document.getElementById('namespace')?.value || 'default';
+            const context = document.getElementById('context')?.value || '';
+
+            if (!pod) {
+                setStatus('Pod를 선택하세요');
+                return;
+            }
+
+            // 기존 스트리밍 중지
+            if (isStreaming) {
+                stopStream();
+            }
+
+            const btn = document.getElementById('fetch-all-btn');
+            const originalText = btn.textContent;
+            btn.textContent = '⏳ 로딩중...';
+            btn.disabled = true;
+
+            setStatus(`📥 전체 로그 다운로드 중: ${pod}...`);
+
+            try {
+                const url = `/api/k8s/logs/all?pod=${encodeURIComponent(pod)}&namespace=${encodeURIComponent(namespace)}&context=${encodeURIComponent(context)}`;
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (data.error) {
+                    setStatus('오류: ' + data.error);
+                    return;
+                }
+
+                // 로그 로드
+                allLogs = data.logs;
+                window.allLogs = allLogs;
+                applyFilter();
+
+                const elapsed = (data.elapsed / 1000).toFixed(1);
+                setStatus(`✅ 전체 로그 로드 완료: ${pod} (${data.count.toLocaleString()}줄, ${elapsed}초)`);
+
+                // 맨 위로 스크롤 (전체 로그는 처음부터 확인)
+                requestAnimationFrame(() => {
+                    const container = document.querySelector('.log-table-container');
+                    if (container) {
+                        container.scrollTop = 0;
+                    }
+                });
+            } catch (e) {
+                setStatus('전체 로그 가져오기 실패: ' + e.message);
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        }
+
         // ===== SSE 스트리밍 함수 =====
         function startStream(pod, namespace, context) {
             if (eventSource) {
@@ -1232,7 +1307,7 @@
             if (!row || !row.hasAttribute('data-index')) return;
 
             row.addEventListener('click', function(e) {
-                if (e.target.classList.contains('json-preview')) {
+                if (e.target.classList.contains('json-preview') || e.target.classList.contains('json-expanded')) {
                     toggleJsonExpand(e.target);
                     return;
                 }
@@ -1385,7 +1460,7 @@
             await fetch('/api/clear');
             allLogs = [];
             filteredLogs = [];
-            selectedLogIndex = -1;  // 선택 상태 초기화
+            clearSelection();  // 선택 상태 초기화
 
             // DOM 풀 리셋
             if (rowPool.initialized) {
@@ -1400,6 +1475,7 @@
         async function refreshLogs(scrollToBottom = false) {
             const res = await fetch('/api/logs');
             allLogs = await res.json();
+            window.allLogs = allLogs;  // 테스트용 전역 참조 업데이트
             applyFilter();
 
             // 맨 아래로 스크롤 (렌더링 완료 후)
@@ -1453,28 +1529,473 @@
             setStatus(`${logsToDownload.length}줄 다운로드됨: ${filename}`);
         }
 
+        // ===== 로그 파일 불러오기 =====
+        function loadLogFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // 파일 입력 초기화 (같은 파일 다시 선택 가능하도록)
+            event.target.value = '';
+
+            setStatus(`📂 파일 로딩 중: ${file.name}...`);
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const content = e.target.result;
+                const lines = content.split('\n');
+                const parsedLogs = parseLogLines(lines);
+
+                if (parsedLogs.length === 0) {
+                    setStatus('파싱된 로그가 없습니다');
+                    return;
+                }
+
+                // 기존 스트리밍 중지
+                if (isStreaming) {
+                    stopStream();
+                }
+
+                // 로그 로드
+                allLogs = parsedLogs;
+                window.allLogs = allLogs;
+                applyFilter();
+
+                setStatus(`✅ 파일 로드 완료: ${file.name} (${parsedLogs.length.toLocaleString()}줄)`);
+
+                // 맨 위로 스크롤
+                requestAnimationFrame(() => {
+                    const container = document.querySelector('.log-table-container');
+                    if (container) {
+                        container.scrollTop = 0;
+                        autoScroll = false;
+                        updateAutoScrollStatus();
+                    }
+                });
+            };
+
+            reader.onerror = function() {
+                setStatus('파일 읽기 실패: ' + file.name);
+            };
+
+            reader.readAsText(file);
+        }
+
+        // 로그 라인 파싱 (클라이언트 측)
+        function parseLogLines(lines) {
+            const logs = [];
+            let lineNumber = 0;
+
+            // 로그 패턴들 (서버와 동일)
+            const SPRING_PATTERN = /^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3})\s+(\w+)\s+\d+\s+---\s+\[([^\]]+)\]\s+(\S+)\s+:\s+(.*)$/;
+            const DX_PATTERN = /^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3})\s+\[(\w+)\s*\]\s+\[([^\]]+)\]\s+(\S+)\s+-\s+(.*)$/;
+            const LOGBACK_PATTERN_WITH_TRACE = /^\[(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}[,\.]\d{3})(?:\s+\d+)?\]\[(\w+)\s*\]\[([^\]]+)\]\[([^\]]*)\]\|?(.*)$/;
+            const LOGBACK_PATTERN_NO_TRACE = /^\[(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}[,\.]\d{3})(?:\s+\d+)?\]\[(\w+)\s*\]\[([^\]]+)\](?:\[\])?\|?(.*)$/;
+            const BRACKET_PATTERN_LEGACY = /^\[(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}[,\.]\d{3})(?:\s+\d+)?\]\[(\w+)\s*\]\[([^\]]+)\]\[([^\]]+)\]([^|].*)$/;
+            const GENERAL_PATTERN = /^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d{3})?)\s+(\w+)\s+(\S+)\s+-?\s*(.*)$/;
+            // 다운로드된 파일 형식: "dateTime level [thread] class message"
+            const DOWNLOADED_PATTERN = /^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d{3})?)\s+(\w+)\s+\[([^\]]+)\]\s+(\S+)\s+(.*)$/;
+
+            const LEVEL_MAP = {
+                'TRACE': 'TRACE', 'DEBUG': 'DEBUG', 'INFO': 'INFO',
+                'WARN': 'WARN', 'WARNING': 'WARN', 'ERROR': 'ERROR',
+                'FATAL': 'FATAL', 'SEVERE': 'ERROR'
+            };
+
+            function normalizeLevel(level) {
+                const upper = level.toUpperCase().trim();
+                return LEVEL_MAP[upper] || 'INFO';
+            }
+
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed) continue;
+
+                lineNumber++;
+                let match;
+                let entry = null;
+
+                // 다운로드된 파일 형식 먼저 시도
+                match = trimmed.match(DOWNLOADED_PATTERN);
+                if (match) {
+                    entry = {
+                        line: lineNumber,
+                        dateTime: match[1],
+                        level: normalizeLevel(match[2]),
+                        thread: match[3].trim(),
+                        class: match[4],
+                        message: match[5],
+                        hasStackTrace: false
+                    };
+                }
+
+                // Spring Boot 패턴
+                if (!entry) {
+                    match = trimmed.match(SPRING_PATTERN);
+                    if (match) {
+                        entry = {
+                            line: lineNumber,
+                            dateTime: match[1],
+                            level: normalizeLevel(match[2]),
+                            thread: match[3].trim(),
+                            class: match[4],
+                            message: match[5],
+                            hasStackTrace: false
+                        };
+                    }
+                }
+
+                // DX 패턴
+                if (!entry) {
+                    match = trimmed.match(DX_PATTERN);
+                    if (match) {
+                        entry = {
+                            line: lineNumber,
+                            dateTime: match[1],
+                            level: normalizeLevel(match[2]),
+                            thread: match[3].trim(),
+                            class: match[4],
+                            message: match[5],
+                            hasStackTrace: false
+                        };
+                    }
+                }
+
+                // Logback 패턴 (traceId 포함)
+                if (!entry) {
+                    match = trimmed.match(LOGBACK_PATTERN_WITH_TRACE);
+                    if (match) {
+                        const traceId = match[4].trim();
+                        entry = {
+                            line: lineNumber,
+                            dateTime: match[1].replace(',', '.'),
+                            level: normalizeLevel(match[2]),
+                            thread: traceId ? traceId.substring(0, 8) : 'main',
+                            class: match[3].trim(),
+                            message: match[5].trim(),
+                            hasStackTrace: false
+                        };
+                    }
+                }
+
+                // Logback 패턴 (traceId 없음)
+                if (!entry) {
+                    match = trimmed.match(LOGBACK_PATTERN_NO_TRACE);
+                    if (match) {
+                        entry = {
+                            line: lineNumber,
+                            dateTime: match[1].replace(',', '.'),
+                            level: normalizeLevel(match[2]),
+                            thread: 'main',
+                            class: match[3].trim(),
+                            message: match[4].trim(),
+                            hasStackTrace: false
+                        };
+                    }
+                }
+
+                // 레거시 Bracket 패턴
+                if (!entry) {
+                    match = trimmed.match(BRACKET_PATTERN_LEGACY);
+                    if (match) {
+                        entry = {
+                            line: lineNumber,
+                            dateTime: match[1].replace(',', '.'),
+                            level: normalizeLevel(match[2]),
+                            thread: match[4].trim().substring(0, 8),
+                            class: match[3].trim(),
+                            message: match[5].trim(),
+                            hasStackTrace: false
+                        };
+                    }
+                }
+
+                // 일반 패턴
+                if (!entry) {
+                    match = trimmed.match(GENERAL_PATTERN);
+                    if (match) {
+                        entry = {
+                            line: lineNumber,
+                            dateTime: match[1],
+                            level: normalizeLevel(match[2]),
+                            thread: 'main',
+                            class: match[3],
+                            message: match[4],
+                            hasStackTrace: false
+                        };
+                    }
+                }
+
+                // 매칭 실패 시 기본 엔트리
+                if (!entry) {
+                    entry = {
+                        line: lineNumber,
+                        dateTime: '',
+                        level: 'INFO',
+                        thread: 'unknown',
+                        class: 'unknown',
+                        message: trimmed,
+                        hasStackTrace: trimmed.startsWith('at ') || trimmed.includes('Exception')
+                    };
+                }
+
+                logs.push(entry);
+            }
+
+            return logs;
+        }
+
         // ===== 필터 함수 =====
+        let filterJobId = 0;  // 현재 필터 작업 ID (새 작업 시작 시 이전 작업 취소용)
+
+        // 현재 viewport 중심에 있는 로그의 line 번호 가져오기
+        function getCurrentCenterLogLine() {
+            if (!filteredLogs || filteredLogs.length === 0) return null;
+            const container = document.querySelector('.log-table-container');
+            if (!container) return null;
+
+            const scrollTop = container.scrollTop;
+            const clientHeight = container.clientHeight;
+            const centerScrollPos = scrollTop + clientHeight / 2;
+            const centerIndex = Math.floor(centerScrollPos / virtualScroll.rowHeight);
+            const clampedIndex = Math.min(Math.max(0, centerIndex), filteredLogs.length - 1);
+
+            return filteredLogs[clampedIndex]?.line || null;
+        }
+
+        // line 번호로 가장 가까운 로그 인덱스 찾기 (이진 탐색)
+        function findNearestLogIndex(logs, targetLine) {
+            if (!logs || logs.length === 0 || targetLine === null) return 0;
+
+            let left = 0, right = logs.length - 1;
+            let nearest = 0;
+            let minDiff = Infinity;
+
+            while (left <= right) {
+                const mid = Math.floor((left + right) / 2);
+                const diff = Math.abs(logs[mid].line - targetLine);
+
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    nearest = mid;
+                }
+
+                if (logs[mid].line < targetLine) {
+                    left = mid + 1;
+                } else if (logs[mid].line > targetLine) {
+                    right = mid - 1;
+                } else {
+                    return mid;  // 정확히 일치
+                }
+            }
+
+            return nearest;
+        }
+
+        // 특정 인덱스가 viewport 중앙에 오도록 스크롤 및 렌더링
+        function scrollToCenter(index) {
+            const container = document.querySelector('.log-table-container');
+            if (!container || !filteredLogs || filteredLogs.length === 0) return;
+
+            const clientHeight = container.clientHeight;
+            const targetScrollTop = (index * virtualScroll.rowHeight) - (clientHeight / 2) + (virtualScroll.rowHeight / 2);
+            container.scrollTop = Math.max(0, targetScrollTop);
+
+            // 가상 스크롤이 활성화된 경우, 해당 위치의 행들을 직접 렌더링
+            if (virtualScroll.enabled) {
+                const visibleRows = Math.ceil(clientHeight / virtualScroll.rowHeight) || 30;
+                const startIndex = Math.max(0, index - Math.floor(visibleRows / 2) - virtualScroll.bufferSize);
+                const endIndex = Math.min(filteredLogs.length, startIndex + visibleRows + virtualScroll.bufferSize * 2);
+
+                virtualScroll.visibleStart = startIndex;
+                virtualScroll.visibleEnd = endIndex;
+                renderVisibleRowsWithPool(filteredLogs, startIndex, endIndex);
+            }
+        }
+
+        // 맨 아래로 스크롤 및 렌더링
+        function scrollToBottom() {
+            const container = document.querySelector('.log-table-container');
+            if (!container || !filteredLogs || filteredLogs.length === 0) return;
+
+            const lastIndex = filteredLogs.length - 1;
+            const clientHeight = container.clientHeight;
+            const visibleRows = Math.ceil(clientHeight / virtualScroll.rowHeight) || 30;
+
+            // 맨 아래로 스크롤
+            container.scrollTop = lastIndex * virtualScroll.rowHeight;
+
+            // 가상 스크롤이 활성화된 경우, 마지막 부분 렌더링
+            if (virtualScroll.enabled) {
+                const startIndex = Math.max(0, filteredLogs.length - visibleRows - virtualScroll.bufferSize);
+                const endIndex = filteredLogs.length;
+
+                virtualScroll.visibleStart = startIndex;
+                virtualScroll.visibleEnd = endIndex;
+                renderVisibleRowsWithPool(filteredLogs, startIndex, endIndex);
+            }
+        }
+
         function applyFilter() {
             // 필터 캐시 무효화 및 새로 생성
             invalidateFilterCache();
             const filterState = getCachedFilterState();
 
+            // 자동스크롤 상태 캡처 (renderLogs 후 변경되기 전에)
+            const wasAutoScroll = autoScroll;
+
+            // 자동 스크롤이 꺼져 있을 때만 위치 유지
+            // 자동 스크롤이 켜져 있으면 맨 아래로 스크롤
+            const shouldPreservePosition = !wasAutoScroll;
+            const centerLine = shouldPreservePosition ? getCurrentCenterLogLine() : null;
+
             // 필터링 수행 (캐시된 상태 사용)
             filteredLogs = allLogs.filter(log => passesFilter(log, filterState));
 
-            // 하이라이트 처리
-            highlightedIndices = [];
-            filteredLogs.forEach((log, index) => {
-                log.isHighlighted = checkHighlight(log, filterState);
-                if (log.isHighlighted) {
-                    highlightedIndices.push(index);
-                }
-            });
+            // 작은 데이터셋은 동기 처리
+            if (filteredLogs.length < 1000) {
+                highlightedIndices = [];
+                filteredLogs.forEach((log, index) => {
+                    log.isHighlighted = checkHighlight(log, filterState);
+                    if (log.isHighlighted) {
+                        highlightedIndices.push(index);
+                    }
+                });
+                updateHighlightCount();
+                renderLogs(filteredLogs);
+                updateIndicator(filteredLogs);
+                updateLogCount();
 
-            updateHighlightCount();
-            renderLogs(filteredLogs);
-            updateIndicator(filteredLogs);
+                // 필터 후 위치 복원
+                if (centerLine !== null && filteredLogs.length > 0) {
+                    const newIndex = findNearestLogIndex(filteredLogs, centerLine);
+                    scrollToCenter(newIndex);
+                } else if (wasAutoScroll && filteredLogs.length > 0) {
+                    // 자동스크롤 ON이었으면 맨 아래로
+                    scrollToBottom();
+                    autoScroll = true;  // 상태 복원
+                }
+                return;
+            }
+
+            // 대용량 데이터: viewport 중심 청크 처리
+            applyFilterAsync(filterState, centerLine);
+        }
+
+        // 비동기 필터 처리 (viewport 중심, 청크 단위)
+        function applyFilterAsync(filterState, centerLine = null) {
+            const jobId = ++filterJobId;
+            const logs = filteredLogs;
+            const total = logs.length;
+            const chunkSize = 500;
+
+            // 자동스크롤 상태 캡처 (renderLogs 후 스크롤 핸들러가 변경하기 전에)
+            const wasAutoScroll = autoScroll;
+
+            // 이전 위치 기반으로 새로운 viewport 중심 계산
+            // autoScroll이 켜져 있으면 (centerLine === null) 맨 아래 기준
+            let viewportCenter;
+            if (centerLine !== null && total > 0) {
+                viewportCenter = findNearestLogIndex(logs, centerLine);
+            } else if (wasAutoScroll && total > 0) {
+                viewportCenter = total - 1;  // 맨 아래
+            } else {
+                const container = document.querySelector('.log-table-container');
+                const currentScrollTop = container ? container.scrollTop : 0;
+                const centerIndex = Math.floor(currentScrollTop / virtualScroll.rowHeight);
+                viewportCenter = Math.min(Math.max(0, centerIndex), total - 1);
+            }
+
+            // 하이라이트 초기화
+            highlightedIndices = [];
+            logs.forEach(log => log.isHighlighted = false);
+
+            // 우선순위 큐: viewport 근처부터 처리
+            const chunks = [];
+            let left = viewportCenter, right = viewportCenter;
+
+            while (left >= 0 || right < total) {
+                // viewport 중심에서 양방향으로 확장
+                if (left >= 0) {
+                    const start = Math.max(0, left - chunkSize + 1);
+                    chunks.push({ start, end: left + 1 });
+                    left = start - 1;
+                }
+                if (right < total) {
+                    const end = Math.min(total, right + chunkSize);
+                    if (right > viewportCenter || left < 0) {  // 중복 방지
+                        chunks.push({ start: right, end });
+                    }
+                    right = end;
+                }
+            }
+
+            let processedChunks = 0;
+            const totalChunks = chunks.length;
+
+            // 즉시 렌더링 (하이라이트 없이)
+            renderLogs(logs);
             updateLogCount();
+            setStatus(`필터링 중... 0/${total}`);
+
+            // 필터 후 위치 복원
+            if (centerLine !== null && total > 0) {
+                scrollToCenter(viewportCenter);
+            } else if (wasAutoScroll && total > 0) {
+                scrollToBottom();
+                autoScroll = true;  // 자동스크롤 상태 복원
+            }
+
+            // 청크 단위 비동기 처리
+            function processNextChunk() {
+                if (jobId !== filterJobId) return;  // 새 작업이 시작됨
+                if (processedChunks >= totalChunks) {
+                    // 완료
+                    updateHighlightCount();
+                    updateIndicator(logs);
+                    setStatus(`필터링 완료: ${highlightedIndices.length}개 하이라이트`);
+
+                    // 현재 보이는 영역 다시 렌더링 (하이라이트 적용)
+                    const visibleStart = virtualScroll.visibleStart;
+                    const visibleEnd = virtualScroll.visibleEnd;
+                    renderVisibleRowsWithPool(logs, visibleStart, visibleEnd);
+                    return;
+                }
+
+                const chunk = chunks[processedChunks];
+                for (let i = chunk.start; i < chunk.end; i++) {
+                    const log = logs[i];
+                    log.isHighlighted = checkHighlight(log, filterState);
+                    if (log.isHighlighted) {
+                        highlightedIndices.push(i);
+                    }
+                }
+
+                processedChunks++;
+                const processed = Math.min(processedChunks * chunkSize, total);
+
+                // 진행 상황 업데이트 (5청크마다)
+                if (processedChunks % 5 === 0 || processedChunks === totalChunks) {
+                    setStatus(`필터링 중... ${processed}/${total}`);
+                    updateHighlightCount();
+                }
+
+                // 첫 번째 청크 후 현재 보이는 영역 즉시 업데이트
+                if (processedChunks === 1) {
+                    const visibleStart = virtualScroll.visibleStart;
+                    const visibleEnd = virtualScroll.visibleEnd;
+                    renderVisibleRowsWithPool(logs, visibleStart, visibleEnd);
+                }
+
+                // 다음 청크 예약 (requestIdleCallback 또는 setTimeout)
+                if (typeof requestIdleCallback !== 'undefined') {
+                    requestIdleCallback(() => processNextChunk(), { timeout: 50 });
+                } else {
+                    setTimeout(processNextChunk, 0);
+                }
+            }
+
+            // 첫 번째 청크 시작
+            processNextChunk();
         }
 
         // ===== 하이라이트 네비게이션 =====
@@ -1509,21 +2030,64 @@
             updateHighlightCount();
 
             const targetIndex = highlightedIndices[currentHighlightPos];
-            scrollToRow(targetIndex);
-            selectRow(targetIndex);
+            // 자동 스크롤 OFF
+            autoScroll = false;
+            updateAutoScrollStatus();
+            // 스크롤 후 렌더링 완료되면 행 선택
+            scrollToRow(targetIndex, () => selectRow(targetIndex));
         }
 
-        function scrollToRow(index) {
+        // 스크롤 중 플래그 (연쇄 렌더링 방지)
+        let isScrollingToRow = false;
+
+        function scrollToRow(index, callback) {
             const container = document.querySelector('.log-table-container');
             if (!container) return;
 
-            if (virtualScroll.enabled) {
-                const scrollTop = index * virtualScroll.rowHeight - container.clientHeight / 2;
-                container.scrollTop = Math.max(0, scrollTop);
+            if (virtualScroll.enabled && filteredLogs.length > 0) {
+                isScrollingToRow = true;
+
+                // 1. 해당 인덱스가 포함된 렌더링 범위 계산 (인덱스 중심)
+                const visibleRows = Math.ceil(container.clientHeight / virtualScroll.rowHeight) || 30;
+                const halfVisible = Math.floor(visibleRows / 2);
+                const startIndex = Math.max(0, index - halfVisible - virtualScroll.bufferSize);
+                const endIndex = Math.min(filteredLogs.length, index + halfVisible + virtualScroll.bufferSize);
+
+                // 2. 가상 스크롤 상태 업데이트
+                virtualScroll.visibleStart = startIndex;
+                virtualScroll.visibleEnd = endIndex;
+
+                // 3. 해당 범위 렌더링
+                renderVisibleRowsWithPool(filteredLogs, startIndex, endIndex);
+
+                // 4. 렌더링 후 해당 행의 실제 위치로 스크롤
+                requestAnimationFrame(() => {
+                    const targetRow = container.querySelector(`tr[data-index="${index}"]`);
+                    if (targetRow) {
+                        // 행의 실제 offset 계산
+                        const rowTop = targetRow.offsetTop;
+                        const rowHeight = targetRow.offsetHeight;
+                        const containerHeight = container.clientHeight;
+
+                        // 화면 중앙에 배치되도록 스크롤 위치 계산
+                        const targetScrollTop = rowTop - (containerHeight / 2) + (rowHeight / 2);
+                        container.scrollTop = Math.max(0, targetScrollTop);
+
+                        // 스크롤 위치 동기화
+                        virtualScroll.lastScrollTop = container.scrollTop;
+                    }
+
+                    // 플래그 해제 및 콜백 실행
+                    requestAnimationFrame(() => {
+                        isScrollingToRow = false;
+                        if (callback) callback();
+                    });
+                });
             } else {
                 const row = container.querySelector(`tr[data-index="${index}"]`);
                 if (row) {
                     row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    if (callback) callback();
                 }
             }
         }
@@ -1573,10 +2137,14 @@
             renderVisibleRowsWithPool(logs, 0, virtualScroll.visibleEnd);
 
             // 스크롤 핸들러 - requestAnimationFrame 기반
-            // 항상 최신 스크롤 위치에서 렌더링하여 뷰포트 누락 방지
+            // scrollThreshold를 사용하여 연쇄 스크롤 방지
             let pendingRender = false;
+            virtualScroll.lastScrollTop = container.scrollTop;
 
             container.onscroll = () => {
+                // scrollToRow 진행 중이면 재렌더링 스킵 (연쇄 스크롤 방지)
+                if (isScrollingToRow) return;
+
                 // 자동 스크롤 상태 업데이트 (항상 즉시 처리)
                 const scrollTop = container.scrollTop;
                 const scrollHeight = container.scrollHeight;
@@ -1588,6 +2156,20 @@
 
                 if (!virtualScroll.enabled) return;
 
+                // 스크롤 변화량 확인 - 임계값 미만이면 무시 (연쇄 스크롤 방지)
+                const scrollDelta = Math.abs(scrollTop - virtualScroll.lastScrollTop);
+                if (scrollDelta < virtualScroll.scrollThreshold && !pendingRender) {
+                    // 임계값 미만이지만, 경계 근처인지 확인
+                    const currentVisibleRows = Math.ceil(clientHeight / virtualScroll.rowHeight) || 30;
+                    const startIndex = Math.max(0, Math.floor(scrollTop / virtualScroll.rowHeight) - virtualScroll.bufferSize);
+                    const endIndex = Math.min(filteredLogs.length, startIndex + currentVisibleRows + virtualScroll.bufferSize * 2);
+
+                    // 뷰포트가 버퍼를 벗어나지 않았으면 재렌더링 스킵
+                    if (startIndex >= virtualScroll.visibleStart && endIndex <= virtualScroll.visibleEnd) {
+                        return;
+                    }
+                }
+
                 // 다음 프레임에 렌더링 예약 (중복 방지)
                 if (!pendingRender) {
                     pendingRender = true;
@@ -1598,14 +2180,17 @@
                         const currentScrollTop = container.scrollTop;
                         const currentClientHeight = container.clientHeight;
 
+                        // 항상 최신 filteredLogs 사용 (스트리밍 중 새 로그 반영)
+                        const currentLogs = filteredLogs;
                         const currentVisibleRows = Math.ceil(currentClientHeight / virtualScroll.rowHeight) || 30;
                         const startIndex = Math.max(0, Math.floor(currentScrollTop / virtualScroll.rowHeight) - virtualScroll.bufferSize);
-                        const endIndex = Math.min(logs.length, startIndex + currentVisibleRows + virtualScroll.bufferSize * 2);
+                        const endIndex = Math.min(currentLogs.length, startIndex + currentVisibleRows + virtualScroll.bufferSize * 2);
 
                         if (startIndex !== virtualScroll.visibleStart || endIndex !== virtualScroll.visibleEnd) {
                             virtualScroll.visibleStart = startIndex;
                             virtualScroll.visibleEnd = endIndex;
-                            renderVisibleRowsWithPool(logs, startIndex, endIndex);
+                            virtualScroll.lastScrollTop = currentScrollTop;  // 렌더링 후 위치 저장
+                            renderVisibleRowsWithPool(currentLogs, startIndex, endIndex);
                         }
                     });
                 }
@@ -1618,30 +2203,20 @@
                 const row = e.target.closest('tr[data-index]');
                 if (!row) return;
 
-                // JSON 클릭 처리
-                if (e.target.classList.contains('json-preview')) {
+                // JSON 클릭 처리 (preview 또는 expanded 상태 모두)
+                if (e.target.classList.contains('json-preview') || e.target.classList.contains('json-expanded')) {
                     toggleJsonExpand(e.target);
                     return;
                 }
 
-                // 행 선택 (index 기반으로 저장)
+                // 행 선택 (다중 선택 지원)
                 const index = parseInt(row.dataset.index);
                 if (!isNaN(index)) {
-                    selectedLogIndex = index;
+                    handleRowClick(index, e);
 
                     // 행 선택 시 자동 스크롤 OFF (화면 고정, 로그는 계속 쌓임)
                     autoScroll = false;
                     updateAutoScrollStatus();
-
-                    // 모든 행의 선택 상태 업데이트
-                    document.querySelectorAll('.log-table tr[data-index]').forEach(r => {
-                        const rIndex = parseInt(r.dataset.index);
-                        if (rIndex === selectedLogIndex) {
-                            r.classList.add('log-row-selected');
-                        } else {
-                            r.classList.remove('log-row-selected');
-                        }
-                    });
                 }
             });
 
@@ -1661,14 +2236,107 @@
             });
         }
 
+        // ===== 다중 선택 및 클립보드 복사 =====
+
+        // 선택된 로그를 클립보드에 복사
+        function copySelectedLogs() {
+            if (selectedLogIndices.size === 0) return;
+
+            // 인덱스 정렬
+            const sortedIndices = Array.from(selectedLogIndices).sort((a, b) => a - b);
+
+            // 로그 텍스트 생성
+            const logTexts = sortedIndices.map(idx => {
+                const log = filteredLogs[idx];
+                if (!log) return '';
+                return `${log.dateTime} ${log.level.padEnd(5)} [${log.thread}] ${log.class} - ${log.message}`;
+            }).filter(t => t);
+
+            const text = logTexts.join('\n');
+
+            // 클립보드에 복사
+            navigator.clipboard.writeText(text).then(() => {
+                setStatus(`${sortedIndices.length}줄 복사됨`);
+            }).catch(err => {
+                console.error('클립보드 복사 실패:', err);
+                setStatus('클립보드 복사 실패');
+            });
+        }
+
+        // 전체 선택
+        function selectAllLogs() {
+            selectedLogIndices.clear();
+            for (let i = 0; i < filteredLogs.length; i++) {
+                selectedLogIndices.add(i);
+            }
+            updateSelectionUI();
+            setStatus(`전체 ${filteredLogs.length}줄 선택됨 (Ctrl+C로 복사)`);
+        }
+
+        // 선택 해제
+        function clearSelection() {
+            selectedLogIndices.clear();
+            lastSelectedIndex = -1;
+            selectedLogIndex = -1;
+            updateSelectionUI();
+        }
+
+        // 선택 UI 업데이트
+        function updateSelectionUI() {
+            document.querySelectorAll('.log-table tr[data-index]').forEach(row => {
+                const idx = parseInt(row.dataset.index);
+                if (selectedLogIndices.has(idx)) {
+                    row.classList.add('log-row-selected');
+                } else {
+                    row.classList.remove('log-row-selected');
+                }
+            });
+        }
+
+        // 행 클릭 처리 (다중 선택 지원)
+        function handleRowClick(index, event) {
+            if (event.shiftKey && lastSelectedIndex >= 0) {
+                // Shift+클릭: 범위 선택
+                const start = Math.min(lastSelectedIndex, index);
+                const end = Math.max(lastSelectedIndex, index);
+                if (!event.ctrlKey && !event.metaKey) {
+                    selectedLogIndices.clear();
+                }
+                for (let i = start; i <= end; i++) {
+                    selectedLogIndices.add(i);
+                }
+            } else if (event.ctrlKey || event.metaKey) {
+                // Ctrl+클릭: 토글 선택
+                if (selectedLogIndices.has(index)) {
+                    selectedLogIndices.delete(index);
+                } else {
+                    selectedLogIndices.add(index);
+                }
+                lastSelectedIndex = index;
+            } else {
+                // 일반 클릭: 단일 선택
+                selectedLogIndices.clear();
+                selectedLogIndices.add(index);
+                lastSelectedIndex = index;
+            }
+
+            selectedLogIndex = index;  // 레거시 호환
+            updateSelectionUI();
+
+            // 선택 카운트 표시
+            if (selectedLogIndices.size > 1) {
+                setStatus(`${selectedLogIndices.size}줄 선택됨 (Ctrl+C로 복사)`);
+            }
+        }
+
         // 단일 행 업데이트 (북마크 토글 등)
         function updateSingleRow(row, log, index) {
             const highlightKeyword = document.getElementById('highlight-enabled')?.checked ?
                 document.getElementById('highlight-keyword')?.value || '' : '';
 
-            // 행 클래스 업데이트
+            // 행 클래스 업데이트 (다중 선택 지원)
             row.className = 'border-b border-gray-200 dark:border-gray-700';
-            if (index === selectedLogIndex) {
+            if (selectedLogIndices.has(index)) {
                 row.classList.add('log-row-selected');
             } else if (log.isBookmarked) {
                 row.classList.add('log-row-bookmark');
@@ -1772,6 +2440,7 @@
             let message = formatMessage(log.message, highlightKeyword);
 
             return `<tr class="${rowClass} border-b border-gray-200 dark:border-gray-700" data-index="${index}" style="height: ${virtualScroll.rowHeight}px;">
+                <td class="w-14 text-right px-2 text-gray-400 dark:text-gray-500 font-mono text-xs">${log.line || ''}</td>
                 <td class="w-8 text-center text-yellow-500">${log.isBookmarked ? '★' : ''}</td>
                 <td class="w-44 px-1">${log.dateTime}</td>
                 <td class="w-14 text-center font-bold level-${log.level}">${log.level}</td>
@@ -1782,20 +2451,28 @@
         }
 
         // 메시지 포맷팅 (JSON 감지 및 하이라이트)
-        function formatMessage(rawMessage, highlightKeyword) {
-            // JSON 패턴 감지: {...} 또는 [...]
-            const jsonRegex = /(\{[\s\S]*\}|\[[\s\S]*\])/g;
+        function formatMessage(rawMessage, highlightKeyword, jsonExpanded = false) {
             let message = escapeHtml(rawMessage);
 
-            // JSON 데이터가 포함되어 있는지 확인
-            const jsonMatches = rawMessage.match(jsonRegex);
-            if (jsonMatches) {
-                jsonMatches.forEach(jsonStr => {
+            // JSON 감지 - 간단한 휴리스틱 사용 (정규식 백트래킹 방지)
+            // {...} 또는 [...] 패턴을 찾되, 중첩된 구조는 괄호 카운팅으로 처리
+            if (rawMessage.includes('{') || rawMessage.includes('[')) {
+                const jsonObjects = extractJsonObjects(rawMessage);
+                jsonObjects.forEach(jsonStr => {
                     try {
-                        JSON.parse(jsonStr); // 유효한 JSON인지 확인
+                        const parsed = JSON.parse(jsonStr); // 유효한 JSON인지 확인
                         const escapedJson = escapeHtml(jsonStr);
-                        const preview = jsonStr.length > 80 ? escapeHtml(jsonStr.substring(0, 80)) + '...' : escapedJson;
-                        const replacement = `<span class="json-preview text-blue-600 dark:text-blue-400" data-json="${escapedJson.replace(/"/g, '&quot;')}" title="클릭하여 JSON 확장">${preview}</span>`;
+
+                        let replacement;
+                        if (jsonExpanded) {
+                            // 펼쳐진 상태로 렌더링
+                            const formatted = JSON.stringify(parsed, null, 2);
+                            replacement = `<span class="json-expanded text-blue-600 dark:text-blue-400" data-json="${escapedJson.replace(/"/g, '&quot;')}" title="클릭하여 JSON 축소">${escapeHtml(formatted)}</span>`;
+                        } else {
+                            // 미리보기 상태로 렌더링
+                            const preview = jsonStr.length > 80 ? escapeHtml(jsonStr.substring(0, 80)) + '...' : escapedJson;
+                            replacement = `<span class="json-preview text-blue-600 dark:text-blue-400" data-json="${escapedJson.replace(/"/g, '&quot;')}" title="클릭하여 JSON 확장">${preview}</span>`;
+                        }
                         message = message.replace(escapedJson, replacement);
                     } catch (e) {
                         // JSON 파싱 실패 - 원본 유지
@@ -1832,28 +2509,44 @@
 
             if (!leftContainer || !rightContainer) return;
 
-            leftContainer.innerHTML = '';
-            rightContainer.innerHTML = '';
-
-            if (logs.length === 0) return;
+            if (logs.length === 0) {
+                leftContainer.innerHTML = '';
+                rightContainer.innerHTML = '';
+                return;
+            }
 
             const containerHeight = leftContainer.clientHeight || 300;
+            const leftHtml = [];
+            const rightHtml = [];
+
+            // 성능: 마커 개수 제한 (최대 1000개씩)
+            const maxMarkers = 1000;
+            let leftCount = 0, rightCount = 0;
 
             logs.forEach((log, index) => {
                 const top = (index / logs.length) * containerHeight;
+                const lineNum = log.line;
 
-                if (log.isHighlighted) {
-                    leftContainer.innerHTML += `<div class="indicator-marker absolute w-full h-1 bg-yellow-400 cursor-pointer hover:h-2 transition-all" style="top: ${top}px" data-index="${index}" title="하이라이트 #${index + 1}"></div>`;
-                } else if (log.isBookmarked) {
-                    leftContainer.innerHTML += `<div class="indicator-marker absolute w-full h-1 bg-blue-400 cursor-pointer hover:h-2 transition-all" style="top: ${top}px" data-index="${index}" title="북마크 #${index + 1}"></div>`;
+                if (log.isHighlighted && leftCount < maxMarkers) {
+                    leftHtml.push(`<div class="indicator-marker absolute w-full h-1 bg-yellow-400 cursor-pointer hover:h-2 transition-all" style="top: ${top}px" data-line="${lineNum}" title="하이라이트 Line #${lineNum}"></div>`);
+                    leftCount++;
+                } else if (log.isBookmarked && leftCount < maxMarkers) {
+                    leftHtml.push(`<div class="indicator-marker absolute w-full h-1 bg-blue-400 cursor-pointer hover:h-2 transition-all" style="top: ${top}px" data-line="${lineNum}" title="북마크 Line #${lineNum}"></div>`);
+                    leftCount++;
                 }
 
-                if (log.level === 'ERROR' || log.level === 'FATAL') {
-                    rightContainer.innerHTML += `<div class="indicator-marker absolute w-full h-1 bg-red-500 cursor-pointer hover:h-2 transition-all" style="top: ${top}px" data-index="${index}" title="에러 #${index + 1}"></div>`;
-                } else if (log.level === 'WARN') {
-                    rightContainer.innerHTML += `<div class="indicator-marker absolute w-full h-1 bg-orange-400 cursor-pointer hover:h-2 transition-all" style="top: ${top}px" data-index="${index}" title="경고 #${index + 1}"></div>`;
+                if ((log.level === 'ERROR' || log.level === 'FATAL') && rightCount < maxMarkers) {
+                    rightHtml.push(`<div class="indicator-marker absolute w-full h-1 bg-red-500 cursor-pointer hover:h-2 transition-all" style="top: ${top}px" data-line="${lineNum}" title="에러 Line #${lineNum}"></div>`);
+                    rightCount++;
+                } else if (log.level === 'WARN' && rightCount < maxMarkers) {
+                    rightHtml.push(`<div class="indicator-marker absolute w-full h-1 bg-orange-400 cursor-pointer hover:h-2 transition-all" style="top: ${top}px" data-line="${lineNum}" title="경고 Line #${lineNum}"></div>`);
+                    rightCount++;
                 }
             });
+
+            // 한 번에 innerHTML 설정 (DOM 재파싱 1회만)
+            leftContainer.innerHTML = leftHtml.join('');
+            rightContainer.innerHTML = rightHtml.join('');
 
             // 인디케이터 클릭 이벤트 (이벤트 위임)
             [leftContainer, rightContainer].forEach(container => {
@@ -1861,10 +2554,18 @@
                     const marker = e.target.closest('.indicator-marker');
                     if (!marker) return;
 
-                    const index = parseInt(marker.dataset.index);
-                    if (!isNaN(index)) {
-                        scrollToRow(index);
-                        selectRow(index);
+                    const lineNum = parseInt(marker.dataset.line);
+                    if (!isNaN(lineNum)) {
+                        // line 번호로 현재 filteredLogs에서 인덱스 찾기
+                        const currentIndex = filteredLogs.findIndex(log => log.line === lineNum);
+                        if (currentIndex >= 0) {
+                            // 자동 스크롤 OFF (사용자가 특정 위치로 이동)
+                            autoScroll = false;
+                            updateAutoScrollStatus();
+
+                            // 스크롤 후 렌더링 완료되면 행 선택
+                            scrollToRow(currentIndex, () => selectRow(currentIndex));
+                        }
                     }
                 };
             });
@@ -1879,6 +2580,50 @@
             document.getElementById('status-text').textContent = message;
         }
 
+        // JSON 객체 추출 (괄호 카운팅 방식 - 정규식 백트래킹 방지)
+        function extractJsonObjects(str) {
+            const results = [];
+            const len = str.length;
+            let i = 0;
+
+            while (i < len) {
+                const ch = str[i];
+                if (ch === '{' || ch === '[') {
+                    const closingChar = ch === '{' ? '}' : ']';
+                    let depth = 1;
+                    let start = i;
+                    let inString = false;
+                    let escape = false;
+                    i++;
+
+                    while (i < len && depth > 0) {
+                        const c = str[i];
+                        if (escape) {
+                            escape = false;
+                        } else if (c === '\\') {
+                            escape = true;
+                        } else if (c === '"') {
+                            inString = !inString;
+                        } else if (!inString) {
+                            if (c === ch) depth++;
+                            else if (c === closingChar) depth--;
+                        }
+                        i++;
+                    }
+
+                    if (depth === 0) {
+                        results.push(str.substring(start, i));
+                    }
+                } else {
+                    i++;
+                }
+
+                // 성능: 최대 3개까지만 추출
+                if (results.length >= 3) break;
+            }
+            return results;
+        }
+
         function escapeHtml(str) {
             if (!str) return '';
             return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -1891,8 +2636,8 @@
         function attachRowEvents() {
             document.querySelectorAll('.log-table tbody tr[data-index]').forEach(row => {
                 row.addEventListener('click', function(e) {
-                    // JSON 클릭 처리
-                    if (e.target.classList.contains('json-preview')) {
+                    // JSON 클릭 처리 (preview 또는 expanded 상태 모두)
+                    if (e.target.classList.contains('json-preview') || e.target.classList.contains('json-expanded')) {
                         toggleJsonExpand(e.target);
                         return;
                     }
@@ -1916,10 +2661,16 @@
             const isExpanded = element.classList.contains('json-expanded');
             const originalJson = element.dataset.json;
 
+            // 로그 객체에 상태 저장
+            const row = element.closest('tr[data-index]');
+            const index = row ? parseInt(row.dataset.index) : -1;
+            const log = index >= 0 ? filteredLogs[index] : null;
+
             if (isExpanded) {
                 element.classList.remove('json-expanded');
                 element.classList.add('json-preview');
                 element.textContent = originalJson.length > 100 ? originalJson.substring(0, 100) + '...' : originalJson;
+                if (log) log.jsonExpanded = false;
             } else {
                 try {
                     const parsed = JSON.parse(originalJson);
@@ -1927,6 +2678,7 @@
                     element.classList.remove('json-preview');
                     element.classList.add('json-expanded');
                     element.textContent = formatted;
+                    if (log) log.jsonExpanded = true;
                 } catch (e) {
                     element.textContent = originalJson;
                 }
@@ -1959,7 +2711,7 @@
                 });
                 input.addEventListener('input', debounce(() => {
                     applyFilter();  // 전체 필터링은 debounce
-                }, 300));
+                }, 500));
             });
 
             // 초기 필터 입력 스타일 설정
@@ -1993,10 +2745,26 @@
                 } else if (e.key === 'g' && e.ctrlKey) {
                     e.preventDefault();
                     document.getElementById('goto-line')?.focus();
+                } else if (e.key === 'c' && (e.ctrlKey || e.metaKey)) {
+                    // Ctrl+C / Cmd+C: 선택된 로그 복사
+                    if (selectedLogIndices.size > 0) {
+                        e.preventDefault();
+                        copySelectedLogs();
+                    }
+                } else if (e.key === 'a' && (e.ctrlKey || e.metaKey)) {
+                    // Ctrl+A: 전체 선택 (포커스가 입력창에 없을 때)
+                    const activeEl = document.activeElement;
+                    if (activeEl?.tagName !== 'INPUT' && activeEl?.tagName !== 'TEXTAREA') {
+                        e.preventDefault();
+                        selectAllLogs();
+                    }
                 } else if (e.key === 'Escape') {
                     const activeEl = document.activeElement;
                     if (activeEl?.tagName === 'INPUT') {
                         activeEl.blur();
+                    } else {
+                        // 선택 해제
+                        clearSelection();
                     }
                 }
             });
@@ -2040,10 +2808,11 @@
             return false;
         };
 
-        // 테스트용 전역 함수 노출
+        // 전역 함수 노출
         window.applyFilter = applyFilter;
         window.renderLogs = renderLogs;
         window.addLogEntry = addLogEntry;
+        window.fetchAllLogs = fetchAllLogs;
 
         window.onload = function() {
             // 배열 참조 재설정 (페이지 로드 후)

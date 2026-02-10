@@ -1,0 +1,18 @@
+{
+  "name": "k8s-log-viewer",
+  "version": "1.0.0",
+  "description": "K8s Log Viewer - Web UI with Express backend",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "playwright": "^1.58.2"
+  }
+}

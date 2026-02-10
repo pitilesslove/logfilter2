@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+build/
+bin/
+.gradle/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Test outputs
+.playwright-mcp/
+test-results/
+
+# OS files
+.DS_Store
