@@ -81,6 +81,13 @@
             background-color: #1D4ED8 !important;
         }
 
+        /* 드래그 선택 중 텍스트 선택 방지 */
+        .log-table-container.is-dragging {
+            user-select: none;
+            -webkit-user-select: none;
+            cursor: default;
+        }
+
         /* JSON 데이터 포맷팅 */
         .json-preview {
             max-width: 600px;
@@ -111,6 +118,10 @@
         .log-table-container {
             overflow-anchor: none;  /* 브라우저 자동 스크롤 조정 비활성화 */
             scroll-behavior: auto;  /* smooth 비활성화 */
+            direction: rtl;         /* 스크롤바를 왼쪽으로 이동 */
+        }
+        .log-table-container > * {
+            direction: ltr;         /* 내부 콘텐츠는 정상 방향 유지 */
         }
 
         /* 필터 입력 컬러링 */
@@ -458,6 +469,16 @@
         let selectedLogIndices = new Set();  // 선택된 인덱스들
         let lastSelectedIndex = -1;          // 마지막 선택 (Shift 범위 선택용)
         let selectedLogIndex = -1;           // 레거시 호환용
+
+        // 드래그 선택 상태
+        let isDragging = false;
+        let dragActivated = false;           // 드래그 임계값 초과 여부
+        let dragStartIndex = -1;
+        let dragStartY = 0;                  // mousedown Y 좌표
+        let dragLastIndex = -1;              // 마지막 유효 행 인덱스
+        let dragAutoScrollTimer = null;
+        let dragBaseSelection = new Set();   // 드래그 시작 전 기존 선택 (Ctrl+드래그용)
+        const DRAG_THRESHOLD = 5;            // 드래그 시작 최소 이동 거리 (px)
 
         // 테스트용 전역 노출
         window.allLogs = allLogs;
@@ -2093,18 +2114,12 @@
         }
 
         function selectRow(index) {
-            // index 기반으로 선택 상태 저장
+            // 다중 선택 시스템과 연동 (단일 선택)
             selectedLogIndex = index;
-
-            // 모든 행의 선택 상태 업데이트
-            document.querySelectorAll('.log-table tr[data-index]').forEach(r => {
-                const rIndex = parseInt(r.dataset.index);
-                if (rIndex === selectedLogIndex) {
-                    r.classList.add('log-row-selected');
-                } else {
-                    r.classList.remove('log-row-selected');
-                }
-            });
+            lastSelectedIndex = index;
+            selectedLogIndices.clear();
+            selectedLogIndices.add(index);
+            updateSelectionUI();
         }
 
         // ===== 렌더링 함수 =====
@@ -2197,26 +2212,176 @@
             };
         }
 
+        // 마우스 Y 좌표로 행 인덱스 계산 (DOM 기반 - 실제 행 높이에 무관)
+        function getRowIndexFromMouseY(clientY) {
+            const container = document.querySelector('.log-table-container');
+            if (!container) return -1;
+            const rect = container.getBoundingClientRect();
+            // 컨테이너 밖이면 무효
+            if (clientY < rect.top || clientY > rect.bottom) return -1;
+
+            // elementsFromPoint로 해당 위치의 실제 행 요소 찾기
+            const probeX = rect.left + rect.width * 0.6;
+            const elements = document.elementsFromPoint(probeX, clientY);
+            for (const el of elements) {
+                const row = el.closest('tr[data-index]');
+                if (row) {
+                    const idx = parseInt(row.dataset.index);
+                    return isNaN(idx) ? -1 : idx;
+                }
+            }
+            return -1;
+        }
+
+        // 드래그 범위 선택 업데이트
+        function updateDragSelection(currentIndex) {
+            if (currentIndex < 0) return;
+            const start = Math.min(dragStartIndex, currentIndex);
+            const end = Math.max(dragStartIndex, currentIndex);
+
+            // 기존 선택(Ctrl+드래그용) 복원 후 드래그 범위 추가
+            selectedLogIndices = new Set(dragBaseSelection);
+            for (let i = start; i <= end; i++) {
+                selectedLogIndices.add(i);
+            }
+            window.selectedLogIndices = selectedLogIndices;
+            updateSelectionUI();
+        }
+
         // Event Delegation 설정 (tbody에 단일 리스너)
         function setupEventDelegation(tbody) {
+            // 클릭 - JSON 토글 전용 (선택은 mousedown에서 처리)
             tbody.addEventListener('click', function(e) {
-                const row = e.target.closest('tr[data-index]');
-                if (!row) return;
-
-                // JSON 클릭 처리 (preview 또는 expanded 상태 모두)
                 if (e.target.classList.contains('json-preview') || e.target.classList.contains('json-expanded')) {
                     toggleJsonExpand(e.target);
-                    return;
+                }
+            });
+
+            // mousedown - 드래그 선택 시작
+            tbody.addEventListener('mousedown', function(e) {
+                if (e.button !== 0) return;  // 좌클릭만
+                const row = e.target.closest('tr[data-index]');
+                if (!row) return;
+                // JSON 클릭은 선택 시작하지 않음
+                if (e.target.classList.contains('json-preview') || e.target.classList.contains('json-expanded')) return;
+
+                const index = parseInt(row.dataset.index);
+                if (isNaN(index)) return;
+
+                isDragging = true;
+                dragActivated = false;
+                dragStartIndex = index;
+                dragStartY = e.clientY;
+                dragLastIndex = index;
+
+                // Ctrl/Cmd: 기존 선택 유지하면서 추가/토글
+                if (e.ctrlKey || e.metaKey) {
+                    dragBaseSelection = new Set(selectedLogIndices);
+                    if (selectedLogIndices.has(index)) {
+                        selectedLogIndices.delete(index);
+                        dragBaseSelection.delete(index);
+                    } else {
+                        selectedLogIndices.add(index);
+                        dragBaseSelection.add(index);
+                    }
+                    dragStartIndex = index;
+                } else if (e.shiftKey && lastSelectedIndex >= 0) {
+                    // Shift: 범위 선택
+                    dragBaseSelection = new Set();
+                    const start = Math.min(lastSelectedIndex, index);
+                    const end = Math.max(lastSelectedIndex, index);
+                    selectedLogIndices.clear();
+                    for (let i = start; i <= end; i++) {
+                        selectedLogIndices.add(i);
+                    }
+                    dragStartIndex = lastSelectedIndex;
+                    dragBaseSelection = new Set();
+                } else {
+                    // 일반 클릭: 새로 시작
+                    dragBaseSelection = new Set();
+                    selectedLogIndices.clear();
+                    selectedLogIndices.add(index);
                 }
 
-                // 행 선택 (다중 선택 지원)
-                const index = parseInt(row.dataset.index);
-                if (!isNaN(index)) {
-                    handleRowClick(index, e);
+                lastSelectedIndex = index;
+                selectedLogIndex = index;
+                window.selectedLogIndices = selectedLogIndices;
+                updateSelectionUI();
 
-                    // 행 선택 시 자동 스크롤 OFF (화면 고정, 로그는 계속 쌓임)
-                    autoScroll = false;
-                    updateAutoScrollStatus();
+                // 행 선택 시 자동 스크롤 OFF
+                autoScroll = false;
+                updateAutoScrollStatus();
+
+                // 텍스트 선택 방지
+                e.preventDefault();
+            });
+
+            // mousemove - 드래그 중 범위 확장 + 자동 스크롤
+            document.addEventListener('mousemove', function(e) {
+                if (!isDragging) return;
+
+                // 드래그 임계값 체크 - 최소 거리 이동 전에는 드래그 시작하지 않음
+                if (!dragActivated) {
+                    if (Math.abs(e.clientY - dragStartY) < DRAG_THRESHOLD) return;
+                    dragActivated = true;
+                    document.querySelector('.log-table-container')?.classList.add('is-dragging');
+                }
+
+                const container = document.querySelector('.log-table-container');
+                if (!container) return;
+                const rect = container.getBoundingClientRect();
+
+                // 현재 마우스 위치의 행 인덱스 계산 (컨테이너 밖이면 -1)
+                const currentIndex = getRowIndexFromMouseY(e.clientY);
+                if (currentIndex >= 0) {
+                    dragLastIndex = currentIndex;
+                    updateDragSelection(currentIndex);
+                }
+                // 컨테이너 밖이면 마지막 유효 인덱스 유지 (갑자기 끝까지 선택 방지)
+
+                // 가장자리 자동 스크롤
+                const edgeThreshold = 40;
+                const thead = container.querySelector('thead');
+                const theadTop = rect.top + (thead ? thead.getBoundingClientRect().height : 0);
+                clearInterval(dragAutoScrollTimer);
+                dragAutoScrollTimer = null;
+
+                if (e.clientY < theadTop + edgeThreshold && e.clientY >= rect.top) {
+                    // 상단 가장자리 - 위로 스크롤
+                    const intensity = Math.max(0.3, 1 - (e.clientY - rect.top) / edgeThreshold);
+                    dragAutoScrollTimer = setInterval(() => {
+                        container.scrollTop -= Math.ceil(intensity * 2) * virtualScroll.rowHeight;
+                        const idx = getRowIndexFromMouseY(Math.max(e.clientY, theadTop + 1));
+                        if (idx >= 0) {
+                            dragLastIndex = idx;
+                            updateDragSelection(idx);
+                        }
+                    }, 80);
+                } else if (e.clientY > rect.bottom - edgeThreshold && e.clientY <= rect.bottom) {
+                    // 하단 가장자리 - 아래로 스크롤
+                    const intensity = Math.max(0.3, 1 - (rect.bottom - e.clientY) / edgeThreshold);
+                    dragAutoScrollTimer = setInterval(() => {
+                        container.scrollTop += Math.ceil(intensity * 2) * virtualScroll.rowHeight;
+                        const idx = getRowIndexFromMouseY(Math.min(e.clientY, rect.bottom - 1));
+                        if (idx >= 0) {
+                            dragLastIndex = idx;
+                            updateDragSelection(idx);
+                        }
+                    }, 80);
+                }
+            });
+
+            // mouseup - 드래그 종료
+            document.addEventListener('mouseup', function(e) {
+                if (!isDragging) return;
+                isDragging = false;
+                dragActivated = false;
+                clearInterval(dragAutoScrollTimer);
+                dragAutoScrollTimer = null;
+                document.querySelector('.log-table-container')?.classList.remove('is-dragging');
+
+                if (selectedLogIndices.size > 1) {
+                    setStatus(`${selectedLogIndices.size}줄 선택됨 (Ctrl+C로 복사)`);
                 }
             });
 

@@ -86,7 +86,7 @@ app.use('/samples', express.static(path.join(__dirname, '../samples')));
  * 메인 UI 페이지
  */
 app.get('/', (req, res) => {
-    const htmlFile = path.join(__dirname, '../samples/ui-mockup.html');
+    const htmlFile = path.join(__dirname, '../samples/index.html');
     if (fs.existsSync(htmlFile)) {
         res.sendFile(htmlFile);
     } else {
